@@ -1,6 +1,7 @@
 {
-  "name": "my-v0-project",
-  "version": "0.1.0",
+  "name": "hustlers-code",
+  "version": "1.0.0",
+  "description": "Next-level street business analytics platform for tracking inventory, clients, sales, and profits with style.",
   "private": true,
   "scripts": {
     "build": "next build",
