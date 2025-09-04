@@ -1,0 +1,164 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 0 0% 100%;
+  --foreground: 240 10% 3.9%;
+  --card: 0 0% 100%;
+  --card-foreground: 240 10% 3.9%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 240 10% 3.9%;
+  --primary: 240 5.9% 10%;
+  --primary-foreground: 0 0% 98%;
+  --secondary: 240 4.8% 95.9%;
+  --secondary-foreground: 240 5.9% 10%;
+  --muted: 240 4.8% 95.9%;
+  --muted-foreground: 240 3.8% 46.1%;
+  --accent: 240 4.8% 95.9%;
+  --accent-foreground: 240 5.9% 10%;
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 0 0% 98%;
+  --border: 240 5.9% 90%;
+  --input: 240 5.9% 90%;
+  --ring: 240 5.9% 10%;
+  --radius: 0.5rem;
+  --chart-1: 43 77% 52%;
+  --chart-2: 0 100% 27%;
+  --chart-3: 120 30% 56%;
+  --chart-4: 220 13% 47%;
+  --chart-5: 0 0% 12%;
+  --sidebar-background: 0 0% 7%;
+  --sidebar-foreground: 0 0% 98%;
+  --sidebar-primary: 43 77% 52%;
+  --sidebar-primary-foreground: 0 0% 0%;
+  --sidebar-accent: 0 100% 27%;
+  --sidebar-accent-foreground: 0 0% 98%;
+  --sidebar-border: 0 0% 14.9%;
+  --sidebar-ring: 43 77% 52%;
+}
+
+.dark {
+  --background: 240 10% 3.9%;
+  --foreground: 0 0% 98%;
+  --card: 240 10% 3.9%;
+  --card-foreground: 0 0% 98%;
+  --popover: 240 10% 3.9%;
+  --popover-foreground: 0 0% 98%;
+  --primary: 0 0% 98%;
+  --primary-foreground: 240 5.9% 10%;
+  --secondary: 240 3.7% 15.9%;
+  --secondary-foreground: 0 0% 98%;
+  --muted: 240 3.7% 15.9%;
+  --muted-foreground: 240 5% 64.9%;
+  --accent: 240 3.7% 15.9%;
+  --accent-foreground: 0 0% 98%;
+  --destructive: 0 62.8% 30.6%;
+  --destructive-foreground: 0 0% 98%;
+  --border: 240 3.7% 15.9%;
+  --input: 240 3.7% 15.9%;
+  --ring: 240 4.9% 83.9%;
+  --chart-1: 43 77% 52%;
+  --chart-2: 0 100% 27%;
+  --chart-3: 120 30% 56%;
+  --chart-4: 220 13% 47%;
+  --chart-5: 0 0% 12%;
+  --sidebar-background: 0 0% 7%;
+  --sidebar-foreground: 0 0% 98%;
+  --sidebar-primary: 43 77% 52%;
+  --sidebar-primary-foreground: 0 0% 0%;
+  --sidebar-accent: 0 100% 27%;
+  --sidebar-accent-foreground: 0 0% 98%;
+  --sidebar-border: 0 0% 14.9%;
+  --sidebar-ring: 43 77% 52%;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Custom styles */
+.gangster-gradient {
+  background: linear-gradient(to bottom, #121212, #1e1e1e);
+}
+
+.card-sharp {
+  border-radius: 0 !important;
+}
+
+.button-sharp {
+  border-radius: 0 !important;
+}
+
+.input-sharp {
+  border-radius: 0 !important;
+}
+
+.border-sharp {
+  border-radius: 0 !important;
+}
+
+.card-hover {
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+.text-shadow {
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+.gold-text {
+  color: #d4af37;
+}
+
+.money-text {
+  color: #85bb65;
+}
+
+.gangster-font {
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.graffiti-font {
+  font-family: var(--font-permanent-marker), cursive;
+  letter-spacing: 0.05em;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.fade-in {
+  animation: fadeIn 0.5s ease-in-out;
+}
+
+@keyframes moneyCount {
+  0% {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.money-count {
+  animation: moneyCount 0.3s ease-out;
+}
