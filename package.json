@@ -10,6 +10,7 @@
     "start": "next start"
   },
   "dependencies": {
+    "@clerk/nextjs": "^5.7.5",
     "@hookform/resolvers": "latest",
     "@neondatabase/serverless": "^1.0.2",
     "@prisma/adapter-neon": "^7.4.0",
@@ -64,6 +65,7 @@
     "react-resizable-panels": "^2.1.7",
     "recharts": "latest",
     "sonner": "^1.7.1",
+    "svix": "^1.85.0",
     "tailwind-merge": "^2.5.5",
     "tailwindcss-animate": "^1.0.7",
     "uuid": "latest",
