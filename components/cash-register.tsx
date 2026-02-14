@@ -13,6 +13,7 @@ import { HustleStat } from "@/components/hustle-stat"
 import type { Customer, InventoryItem, Transaction } from "@/lib/types"
 import { formatCurrency, formatGrams, formatOunces, ouncesToGrams } from "@/lib/utils"
 import { getInventory, getCustomers, createTransaction, addPayment } from "@/app/actions"
+import { buildSaleMetrics } from "@/src/domains/billing/presentation/cash-register-service"
 
 interface CashRegisterProps {
   showTips: boolean
@@ -60,26 +61,7 @@ export default function CashRegister({ showTips, onHideTips }: CashRegisterProps
   // Get selected customer
   const selectedCustomer = selectedCustomerId ? customers.find((customer) => customer.id === selectedCustomerId) : null
 
-  // Calculate sale price
-  const calculateSalePrice = () => {
-    if (customPrice !== null) return customPrice
-
-    const pricePerGram = retailPricePerGram
-    return pricePerGram * quantity
-  }
-
-  // Calculate cost
-  const calculateCost = () => {
-    if (!selectedInventory) return 0
-
-    const costPerGram = selectedInventory.costPerOz / 28.35
-    return costPerGram * quantity
-  }
-
-  // Calculate profit
-  const calculateProfit = () => {
-    return calculateSalePrice() - calculateCost()
-  }
+  const saleMetrics = buildSaleMetrics(quantity, customPrice, retailPricePerGram, selectedInventory)
 
   // Handle quick sale
   const handleQuickSale = async () => {
@@ -95,10 +77,10 @@ export default function CashRegister({ showTips, onHideTips }: CashRegisterProps
         inventoryId: selectedInventory.id,
         inventoryName: selectedInventory.name,
         quantityGrams: quantity,
-        pricePerGram: calculateSalePrice() / quantity,
-        totalPrice: calculateSalePrice(),
-        cost: calculateCost(),
-        profit: calculateProfit(),
+        pricePerGram: saleMetrics.pricePerGram,
+        totalPrice: saleMetrics.totalPrice,
+        cost: saleMetrics.cost,
+        profit: saleMetrics.profit,
         paymentMethod: paymentMethod,
         customerId: selectedCustomer?.id || null,
         customerName: selectedCustomer?.name || null,
@@ -109,9 +91,9 @@ export default function CashRegister({ showTips, onHideTips }: CashRegisterProps
       await createTransaction(transaction)
 
       // Update daily stats
-      setDailyRevenue((prev) => prev + calculateSalePrice())
+      setDailyRevenue((prev) => prev + saleMetrics.totalPrice)
       setDailyTransactions((prev) => prev + 1)
-      setDailyProfit((prev) => prev + calculateProfit())
+      setDailyProfit((prev) => prev + saleMetrics.profit)
 
       // Refresh inventory data
       const updatedInventory = await getInventory()
@@ -344,7 +326,7 @@ export default function CashRegister({ showTips, onHideTips }: CashRegisterProps
                 <div className="flex items-center space-x-2">
                   <Input
                     type="number"
-                    value={customPrice !== null ? customPrice : calculateSalePrice()}
+                    value={customPrice !== null ? customPrice : saleMetrics.totalPrice}
                     onChange={(e) => setCustomPrice(Number(e.target.value))}
                     step="0.01"
                     min="0"
@@ -394,15 +376,15 @@ export default function CashRegister({ showTips, onHideTips }: CashRegisterProps
               <div className="bg-smoke p-4 space-y-2">
                 <div className="flex justify-between">
                   <span className="gangster-font">TOTAL PRICE:</span>
-                  <span className="font-bold text-gold">{formatCurrency(calculateSalePrice())}</span>
+                  <span className="font-bold text-gold">{formatCurrency(saleMetrics.totalPrice)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="gangster-font">COST:</span>
-                  <span className="text-muted-foreground">{formatCurrency(calculateCost())}</span>
+                  <span className="text-muted-foreground">{formatCurrency(saleMetrics.cost)}</span>
                 </div>
                 <div className="flex justify-between border-t border-muted/20 pt-2 mt-2">
                   <span className="gangster-font">PROFIT:</span>
-                  <span className="font-bold text-money">{formatCurrency(calculateProfit())}</span>
+                  <span className="font-bold text-money">{formatCurrency(saleMetrics.profit)}</span>
                 </div>
               </div>
 
