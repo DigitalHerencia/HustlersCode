@@ -1,0 +1,43 @@
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "04:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 10
+    groups:
+      framework-core:
+        patterns:
+          - "next"
+          - "react"
+          - "react-dom"
+          - "typescript"
+          - "eslint"
+          - "eslint-*"
+          - "@types/*"
+      ui-libraries:
+        patterns:
+          - "@radix-ui/*"
+          - "@hookform/*"
+          - "react-hook-form"
+          - "recharts"
+          - "tailwind*"
+          - "lucide-react"
+      data-and-utility:
+        patterns:
+          - "pg"
+          - "uuid"
+          - "zod"
+          - "date-fns"
+          - "clsx"
+          - "class-variance-authority"
+    ignore:
+      - dependency-name: "next"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-dom"
+        update-types: ["version-update:semver-major"]
