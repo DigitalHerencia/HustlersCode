@@ -115,3 +115,30 @@ CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date);
 CREATE INDEX IF NOT EXISTS idx_transactions_type ON transactions(type);
 CREATE INDEX IF NOT EXISTS idx_payments_customer_id ON payments(customer_id);
 CREATE INDEX IF NOT EXISTS idx_salespeople_scenario_id ON salespeople(scenario_id);
+
+-- App Users synced from Clerk
+CREATE TABLE IF NOT EXISTS app_users (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  clerk_user_id VARCHAR(255) NOT NULL UNIQUE,
+  email VARCHAR(255),
+  first_name VARCHAR(255),
+  last_name VARCHAR(255),
+  image_url TEXT,
+  last_webhook_event_id VARCHAR(255),
+  deleted_at TIMESTAMP WITH TIME ZONE,
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+);
+
+-- Clerk webhook idempotency + audit
+CREATE TABLE IF NOT EXISTS clerk_webhook_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  clerk_event_id VARCHAR(255) NOT NULL UNIQUE,
+  event_type VARCHAR(100) NOT NULL,
+  status VARCHAR(50) NOT NULL DEFAULT 'received',
+  processed_at TIMESTAMP WITH TIME ZONE,
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_app_users_clerk_user_id ON app_users(clerk_user_id);
+CREATE INDEX IF NOT EXISTS idx_clerk_webhook_events_event_type ON clerk_webhook_events(event_type);

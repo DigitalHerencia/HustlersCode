@@ -209,44 +209,6 @@ export async function query(text: string, params: any[] = []) {
   return db.query(text, params)
 }
 
-type TransactionClient = {
-  query: (text: string, params?: any[]) => Promise<any>
-  release?: () => void
-}
-
-export async function $transaction<T>(callback: (client: TransactionClient) => Promise<T>): Promise<T> {
-  const db = await getDb()
-  const pool = db.pool
-  const client: TransactionClient = pool.connect ? await pool.connect() : { query: db.query }
-
-  await client.query("BEGIN")
-
-  try {
-    const result = await callback(client)
-    await client.query("COMMIT")
-    return result
-  } catch (error) {
-    try {
-      await client.query("ROLLBACK")
-    } catch (rollbackError) {
-      console.error("Database transaction rollback failed", {
-        error,
-        rollbackError,
-      })
-    }
-
-    console.error("Database transaction failed", {
-      error,
-    })
-
-    throw error
-  } finally {
-    if (client.release) {
-      client.release()
-    }
-  }
-}
-
 // Export pool for compatibility
 export const pool = {
   query: async (text: string, params: any[] = []) => {
