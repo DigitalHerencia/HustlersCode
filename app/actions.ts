@@ -1,5 +1,8 @@
 "use server"
 
+import "server-only"
+
+
 import { revalidatePath } from "next/cache"
 import { query, toCamelCase, toSnakeCase } from "@/lib/db"
 import type { BusinessData, ScenarioData, InventoryItem, Customer, Payment, Transaction, Account } from "@/lib/types"
