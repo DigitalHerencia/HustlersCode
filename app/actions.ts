@@ -1,7 +1,7 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { query, toCamelCase, toSnakeCase } from "@/lib/db"
+import { $transaction, query, toCamelCase, toSnakeCase } from "@/lib/db"
 import type { BusinessData, ScenarioData, InventoryItem, Customer, Payment, Transaction, Account } from "@/lib/types"
 
 // Business Data Actions
@@ -140,147 +140,135 @@ export async function createScenario(
     const { salespeople, ...scenarioData } = data
     const snakeCaseData = toSnakeCase(scenarioData)
 
-    // Begin transaction
-    await query("BEGIN")
+    const scenarioId = await $transaction(async (tx) => {
+      const scenarioResult = await tx.query(
+        `INSERT INTO scenarios 
+         (name, description, wholesale_price, retail_price, quantity, time_period, expenses)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         RETURNING id`,
+        [
+          snakeCaseData.name,
+          snakeCaseData.description,
+          snakeCaseData.wholesale_price,
+          snakeCaseData.retail_price,
+          snakeCaseData.quantity,
+          snakeCaseData.time_period,
+          snakeCaseData.expenses,
+        ],
+      )
 
-    // Insert scenario
-    const scenarioResult = await query(
-      `INSERT INTO scenarios 
-       (name, description, wholesale_price, retail_price, quantity, time_period, expenses)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       RETURNING *`,
-      [
-        snakeCaseData.name,
-        snakeCaseData.description,
-        snakeCaseData.wholesale_price,
-        snakeCaseData.retail_price,
-        snakeCaseData.quantity,
-        snakeCaseData.time_period,
-        snakeCaseData.expenses,
-      ],
-    )
+      const createdScenarioId = scenarioResult.rows[0]?.id
 
-    const scenario = toCamelCase(scenarioResult.rows[0])
-
-    // Insert salespeople if provided
-    if (salespeople && salespeople.length > 0) {
-      for (const person of salespeople) {
-        const snakeCasePerson = toSnakeCase(person)
-        await query(
-          `INSERT INTO salespeople
-           (scenario_id, name, commission_rate, sales_quantity)
-           VALUES ($1, $2, $3, $4)`,
-          [scenario.id, snakeCasePerson.name, snakeCasePerson.commission_rate, snakeCasePerson.sales_quantity],
-        )
+      if (!createdScenarioId) {
+        throw new Error("Scenario creation failed: missing scenario id")
       }
-    }
 
-    // Commit transaction
-    await query("COMMIT")
+      if (salespeople && salespeople.length > 0) {
+        for (const person of salespeople) {
+          const snakeCasePerson = toSnakeCase(person)
+          await tx.query(
+            `INSERT INTO salespeople
+             (scenario_id, name, commission_rate, sales_quantity)
+             VALUES ($1, $2, $3, $4)`,
+            [createdScenarioId, snakeCasePerson.name, snakeCasePerson.commission_rate, snakeCasePerson.sales_quantity],
+          )
+        }
+      }
 
-    // Fetch the complete scenario with salespeople
-    const result = await getScenario(scenario.id)
+      return createdScenarioId
+    })
+
+    const result = await getScenario(scenarioId)
 
     revalidatePath("/")
     return result
   } catch (error) {
-    // Rollback transaction on error
-    await query("ROLLBACK")
-    console.error("Error creating scenario:", error)
+    console.error("Error creating scenario", {
+      error,
+      context: "createScenario",
+    })
     return null
   }
 }
+
 
 export async function updateScenario(id: string, data: Partial<ScenarioData>): Promise<ScenarioData | null> {
   try {
     const { salespeople, ...scenarioData } = data
     const snakeCaseData = toSnakeCase(scenarioData)
 
-    // Begin transaction
-    await query("BEGIN")
+    await $transaction(async (tx) => {
+      if (Object.keys(snakeCaseData).length > 0) {
+        const updates: string[] = []
+        const values: any[] = []
+        let paramIndex = 1
 
-    // Build dynamic query for scenario update
-    if (Object.keys(snakeCaseData).length > 0) {
-      const updates: string[] = []
-      const values: any[] = []
-      let paramIndex = 1
+        for (const [key, value] of Object.entries(snakeCaseData)) {
+          updates.push(`${key} = $${paramIndex}`)
+          values.push(value)
+          paramIndex++
+        }
 
-      for (const [key, value] of Object.entries(snakeCaseData)) {
-        updates.push(`${key} = $${paramIndex}`)
-        values.push(value)
-        paramIndex++
-      }
+        updates.push(`updated_at = NOW()`)
+        values.push(id)
 
-      // Add updated_at timestamp
-      updates.push(`updated_at = NOW()`)
-
-      // Add id as the last parameter
-      values.push(id)
-
-      await query(
-        `UPDATE scenarios 
-         SET ${updates.join(", ")} 
-         WHERE id = $${paramIndex}`,
-        values,
-      )
-    }
-
-    // Update salespeople if provided
-    if (salespeople) {
-      // Delete existing salespeople
-      await query(`DELETE FROM salespeople WHERE scenario_id = $1`, [id])
-
-      // Insert new salespeople
-      for (const person of salespeople) {
-        const snakeCasePerson = toSnakeCase(person)
-        await query(
-          `INSERT INTO salespeople
-           (scenario_id, name, commission_rate, sales_quantity)
-           VALUES ($1, $2, $3, $4)`,
-          [id, snakeCasePerson.name, snakeCasePerson.commission_rate, snakeCasePerson.sales_quantity],
+        await tx.query(
+          `UPDATE scenarios 
+           SET ${updates.join(", ")} 
+           WHERE id = $${paramIndex}`,
+          values,
         )
       }
-    }
 
-    // Commit transaction
-    await query("COMMIT")
+      if (salespeople) {
+        await tx.query(`DELETE FROM salespeople WHERE scenario_id = $1`, [id])
 
-    // Fetch the updated scenario with salespeople
+        for (const person of salespeople) {
+          const snakeCasePerson = toSnakeCase(person)
+          await tx.query(
+            `INSERT INTO salespeople
+             (scenario_id, name, commission_rate, sales_quantity)
+             VALUES ($1, $2, $3, $4)`,
+            [id, snakeCasePerson.name, snakeCasePerson.commission_rate, snakeCasePerson.sales_quantity],
+          )
+        }
+      }
+    })
+
     const result = await getScenario(id)
 
     revalidatePath("/")
     return result
   } catch (error) {
-    // Rollback transaction on error
-    await query("ROLLBACK")
-    console.error("Error updating scenario:", error)
+    console.error("Error updating scenario", {
+      error,
+      context: "updateScenario",
+      scenarioId: id,
+    })
     return null
   }
 }
 
+
 export async function deleteScenario(id: string): Promise<boolean> {
   try {
-    // Begin transaction
-    await query("BEGIN")
-
-    // Delete salespeople first (foreign key constraint)
-    await query(`DELETE FROM salespeople WHERE scenario_id = $1`, [id])
-
-    // Delete scenario
-    await query(`DELETE FROM scenarios WHERE id = $1`, [id])
-
-    // Commit transaction
-    await query("COMMIT")
+    await $transaction(async (tx) => {
+      await tx.query(`DELETE FROM salespeople WHERE scenario_id = $1`, [id])
+      await tx.query(`DELETE FROM scenarios WHERE id = $1`, [id])
+    })
 
     revalidatePath("/")
     return true
   } catch (error) {
-    // Rollback transaction on error
-    await query("ROLLBACK")
-    console.error("Error deleting scenario:", error)
+    console.error("Error deleting scenario", {
+      error,
+      context: "deleteScenario",
+      scenarioId: id,
+    })
     return false
   }
 }
+
 
 // Inventory Actions
 export async function getInventory(): Promise<InventoryItem[]> {
@@ -498,27 +486,23 @@ export async function updateCustomer(id: string, data: Partial<Customer>): Promi
 
 export async function deleteCustomer(id: string): Promise<boolean> {
   try {
-    // Begin transaction
-    await query("BEGIN")
-
-    // Delete payments first (foreign key constraint)
-    await query(`DELETE FROM payments WHERE customer_id = $1`, [id])
-
-    // Delete customer
-    await query(`DELETE FROM customers WHERE id = $1`, [id])
-
-    // Commit transaction
-    await query("COMMIT")
+    await $transaction(async (tx) => {
+      await tx.query(`DELETE FROM payments WHERE customer_id = $1`, [id])
+      await tx.query(`DELETE FROM customers WHERE id = $1`, [id])
+    })
 
     revalidatePath("/")
     return true
   } catch (error) {
-    // Rollback transaction on error
-    await query("ROLLBACK")
-    console.error("Error deleting customer:", error)
+    console.error("Error deleting customer", {
+      error,
+      context: "deleteCustomer",
+      customerId: id,
+    })
     return false
   }
 }
+
 
 // Payment Actions
 export async function addPayment(
@@ -528,56 +512,51 @@ export async function addPayment(
   try {
     const snakeCaseData = toSnakeCase(data)
 
-    // Begin transaction
-    await query("BEGIN")
+    const paymentResult = await $transaction(async (tx) => {
+      const createdPayment = await tx.query(
+        `INSERT INTO payments 
+         (customer_id, amount, date, method, notes)
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING *`,
+        [customerId, snakeCaseData.amount, snakeCaseData.date, snakeCaseData.method, snakeCaseData.notes],
+      )
 
-    // Insert payment
-    const paymentResult = await query(
-      `INSERT INTO payments 
-       (customer_id, amount, date, method, notes)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING *`,
-      [customerId, snakeCaseData.amount, snakeCaseData.date, snakeCaseData.method, snakeCaseData.notes],
-    )
+      const customerResult = await tx.query(`SELECT * FROM customers WHERE id = $1`, [customerId])
 
-    // Get the customer
-    const customerResult = await query(`SELECT * FROM customers WHERE id = $1`, [customerId])
+      if (customerResult.rows.length > 0) {
+        const customer = customerResult.rows[0]
+        const newAmountOwed = Math.max(0, customer.amount_owed - snakeCaseData.amount)
 
-    if (customerResult.rows.length > 0) {
-      const customer = customerResult.rows[0]
+        let newStatus = "unpaid"
+        if (newAmountOwed === 0) {
+          newStatus = "paid"
+        } else if (snakeCaseData.amount > 0) {
+          newStatus = "partial"
+        }
 
-      // Calculate new amount owed
-      const newAmountOwed = Math.max(0, customer.amount_owed - snakeCaseData.amount)
-
-      // Determine new status
-      let newStatus = "unpaid"
-      if (newAmountOwed === 0) {
-        newStatus = "paid"
-      } else if (snakeCaseData.amount > 0) {
-        newStatus = "partial"
+        await tx.query(
+          `UPDATE customers 
+           SET amount_owed = $1, status = $2, updated_at = NOW() 
+           WHERE id = $3`,
+          [newAmountOwed, newStatus, customerId],
+        )
       }
 
-      // Update customer
-      await query(
-        `UPDATE customers 
-         SET amount_owed = $1, status = $2, updated_at = NOW() 
-         WHERE id = $3`,
-        [newAmountOwed, newStatus, customerId],
-      )
-    }
-
-    // Commit transaction
-    await query("COMMIT")
+      return createdPayment
+    })
 
     revalidatePath("/")
     return toCamelCase(paymentResult.rows[0])
   } catch (error) {
-    // Rollback transaction on error
-    await query("ROLLBACK")
-    console.error("Error adding payment:", error)
+    console.error("Error adding payment", {
+      error,
+      context: "addPayment",
+      customerId,
+    })
     return null
   }
 }
+
 
 // Transaction Actions
 export async function getTransactions(): Promise<Transaction[]> {
@@ -595,84 +574,79 @@ export async function createTransaction(data: Omit<Transaction, "id" | "createdA
   try {
     const snakeCaseData = toSnakeCase(data)
 
-    // Begin transaction
-    await query("BEGIN")
+    const transactionResult = await $transaction(async (tx) => {
+      const createdTransaction = await tx.query(
+        `INSERT INTO transactions 
+         (date, type, inventory_id, inventory_name, quantity_grams, price_per_gram, total_price, 
+          cost, profit, payment_method, customer_id, customer_name, notes)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+         RETURNING *`,
+        [
+          snakeCaseData.date,
+          snakeCaseData.type,
+          snakeCaseData.inventory_id,
+          snakeCaseData.inventory_name,
+          snakeCaseData.quantity_grams,
+          snakeCaseData.price_per_gram,
+          snakeCaseData.total_price,
+          snakeCaseData.cost,
+          snakeCaseData.profit,
+          snakeCaseData.payment_method,
+          snakeCaseData.customer_id,
+          snakeCaseData.customer_name,
+          snakeCaseData.notes,
+        ],
+      )
 
-    // Insert transaction
-    const transactionResult = await query(
-      `INSERT INTO transactions 
-       (date, type, inventory_id, inventory_name, quantity_grams, price_per_gram, total_price, 
-        cost, profit, payment_method, customer_id, customer_name, notes)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-       RETURNING *`,
-      [
-        snakeCaseData.date,
-        snakeCaseData.type,
-        snakeCaseData.inventory_id,
-        snakeCaseData.inventory_name,
-        snakeCaseData.quantity_grams,
-        snakeCaseData.price_per_gram,
-        snakeCaseData.total_price,
-        snakeCaseData.cost,
-        snakeCaseData.profit,
-        snakeCaseData.payment_method,
-        snakeCaseData.customer_id,
-        snakeCaseData.customer_name,
-        snakeCaseData.notes,
-      ],
-    )
+      if (snakeCaseData.type === "sale" && snakeCaseData.inventory_id) {
+        const inventoryResult = await tx.query(`SELECT * FROM inventory_items WHERE id = $1`, [snakeCaseData.inventory_id])
 
-    // If it's a sale, update inventory
-    if (snakeCaseData.type === "sale" && snakeCaseData.inventory_id) {
-      const inventoryResult = await query(`SELECT * FROM inventory_items WHERE id = $1`, [snakeCaseData.inventory_id])
+        if (inventoryResult.rows.length > 0) {
+          const inventory = inventoryResult.rows[0]
 
-      if (inventoryResult.rows.length > 0) {
-        const inventory = inventoryResult.rows[0]
+          const newQuantityG = Math.max(0, inventory.quantity_g - snakeCaseData.quantity_grams)
+          const newQuantityOz = newQuantityG / 28.3495
+          const newQuantityKg = newQuantityG / 1000
+          const newTotalCost = newQuantityOz * inventory.cost_per_oz
 
-        // Calculate new quantity
-        const newQuantityG = Math.max(0, inventory.quantity_g - snakeCaseData.quantity_grams)
-        const newQuantityOz = newQuantityG / 28.3495
-        const newQuantityKg = newQuantityG / 1000
-        const newTotalCost = newQuantityOz * inventory.cost_per_oz
-
-        // Update inventory
-        await query(
-          `UPDATE inventory_items 
-           SET quantity_g = $1, quantity_oz = $2, quantity_kg = $3, total_cost = $4, updated_at = NOW() 
-           WHERE id = $5`,
-          [newQuantityG, newQuantityOz, newQuantityKg, newTotalCost, snakeCaseData.inventory_id],
-        )
+          await tx.query(
+            `UPDATE inventory_items 
+             SET quantity_g = $1, quantity_oz = $2, quantity_kg = $3, total_cost = $4, updated_at = NOW() 
+             WHERE id = $5`,
+            [newQuantityG, newQuantityOz, newQuantityKg, newTotalCost, snakeCaseData.inventory_id],
+          )
+        }
       }
-    }
 
-    // If it's a credit sale, update customer
-    if (snakeCaseData.type === "sale" && snakeCaseData.customer_id && snakeCaseData.payment_method === "credit") {
-      const customerResult = await query(`SELECT * FROM customers WHERE id = $1`, [snakeCaseData.customer_id])
+      if (snakeCaseData.type === "sale" && snakeCaseData.customer_id && snakeCaseData.payment_method === "credit") {
+        const customerResult = await tx.query(`SELECT * FROM customers WHERE id = $1`, [snakeCaseData.customer_id])
 
-      if (customerResult.rows.length > 0) {
-        const customer = customerResult.rows[0]
+        if (customerResult.rows.length > 0) {
+          const customer = customerResult.rows[0]
 
-        await query(
-          `UPDATE customers 
-           SET amount_owed = $1, status = 'unpaid', updated_at = NOW() 
-           WHERE id = $2`,
-          [customer.amount_owed + snakeCaseData.total_price, snakeCaseData.customer_id],
-        )
+          await tx.query(
+            `UPDATE customers 
+             SET amount_owed = $1, status = 'unpaid', updated_at = NOW() 
+             WHERE id = $2`,
+            [customer.amount_owed + snakeCaseData.total_price, snakeCaseData.customer_id],
+          )
+        }
       }
-    }
 
-    // Commit transaction
-    await query("COMMIT")
+      return createdTransaction
+    })
 
     revalidatePath("/")
     return toCamelCase(transactionResult.rows[0])
   } catch (error) {
-    // Rollback transaction on error
-    await query("ROLLBACK")
-    console.error("Error creating transaction:", error)
+    console.error("Error creating transaction", {
+      error,
+      context: "createTransaction",
+    })
     return null
   }
 }
+
 
 // Account Actions
 export async function getAccounts(): Promise<Account[]> {
