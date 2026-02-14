@@ -23,6 +23,9 @@ async function requireAuthenticatedUserId(): Promise<string> {
 const isPrismaNotFound = (error: unknown): boolean =>
   error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025"
 
+const isPrismaNotFound = (error: unknown): boolean =>
+  error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025"
+
 // Business Data Actions
 export async function getBusinessData(): Promise<BusinessData | null> {
   await requireAuthenticatedUserId()
