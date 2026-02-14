@@ -1,3 +1,5 @@
+import "server-only"
+
 // Check if we're in a browser environment
 const isBrowser = typeof window !== "undefined"
 
