@@ -345,7 +345,7 @@ export default function MonthlyForecast({
                       />
                       <Tooltip
                         contentStyle={{ fontSize: isMobile ? "10px" : "12px" }}
-                        formatter={(value: any) => [`$${value}`, ""]}
+                        formatter={(value: number | string) => [`$${value}`, ""]}
                       />
                       <Legend
                         wrapperStyle={{ fontSize: isMobile ? "10px" : "12px" }}
@@ -392,7 +392,7 @@ export default function MonthlyForecast({
                         ))}
                         <LabelList dataKey="name" position="outside" fill="#888" fontSize={10} />
                       </Pie>
-                      <Tooltip formatter={(value: any) => [`$${value}`, ""]} />
+                      <Tooltip formatter={(value: number | string) => [`$${value}`, ""]} />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
@@ -445,7 +445,7 @@ export default function MonthlyForecast({
                       )}
                       <Tooltip
                         contentStyle={{ fontSize: isMobile ? "10px" : "12px" }}
-                        formatter={(value: any) => [`$${value}`, ""]}
+                        formatter={(value: number | string) => [`$${value}`, ""]}
                       />
                       <Legend
                         wrapperStyle={{ fontSize: isMobile ? "10px" : "12px" }}

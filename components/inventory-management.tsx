@@ -99,7 +99,7 @@ export default function InventoryManagement({
         }
       }
 
-      loadInventory()
+      void loadInventory()
     }
   }, [propInventory])
 
