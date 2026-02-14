@@ -1,11 +1,27 @@
 "use server"
 
+import "server-only"
+
+
 import { revalidatePath } from "next/cache"
 import { query, toCamelCase, toSnakeCase } from "@/lib/db"
 import type { BusinessData, ScenarioData, InventoryItem, Customer, Payment, Transaction, Account } from "@/lib/types"
+import { auth } from "@clerk/nextjs/server"
+
+
+async function requireAuthenticatedUserId(): Promise<string> {
+  const { userId } = await auth()
+
+  if (!userId) {
+    throw new Error("Unauthorized")
+  }
+
+  return userId
+}
 
 // Business Data Actions
 export async function getBusinessData(): Promise<BusinessData | null> {
+  await requireAuthenticatedUserId()
   try {
     const result = await query(`SELECT * FROM business_data ORDER BY created_at DESC LIMIT 1`)
 
@@ -23,6 +39,7 @@ export async function getBusinessData(): Promise<BusinessData | null> {
 export async function saveBusinessData(
   data: Omit<BusinessData, "id" | "createdAt" | "updatedAt">,
 ): Promise<BusinessData | null> {
+  await requireAuthenticatedUserId()
   try {
     const snakeCaseData = toSnakeCase(data)
     const result = await query(
@@ -42,6 +59,7 @@ export async function saveBusinessData(
 }
 
 export async function updateBusinessData(id: string, data: Partial<BusinessData>): Promise<BusinessData | null> {
+  await requireAuthenticatedUserId()
   try {
     // Build dynamic query based on provided fields
     const updates: string[] = []
@@ -92,6 +110,7 @@ export async function updateBusinessData(id: string, data: Partial<BusinessData>
 
 // Scenario Actions
 export async function getScenarios(): Promise<ScenarioData[]> {
+  await requireAuthenticatedUserId()
   try {
     const scenariosResult = await query(`SELECT * FROM scenarios ORDER BY created_at DESC`)
 
@@ -112,6 +131,7 @@ export async function getScenarios(): Promise<ScenarioData[]> {
 }
 
 export async function getScenario(id: string): Promise<ScenarioData | null> {
+  await requireAuthenticatedUserId()
   try {
     const scenarioResult = await query(`SELECT * FROM scenarios WHERE id = $1`, [id])
 
@@ -136,6 +156,7 @@ export async function getScenario(id: string): Promise<ScenarioData | null> {
 export async function createScenario(
   data: Omit<ScenarioData, "id" | "createdAt" | "updatedAt">,
 ): Promise<ScenarioData | null> {
+  await requireAuthenticatedUserId()
   try {
     const { salespeople, ...scenarioData } = data
     const snakeCaseData = toSnakeCase(scenarioData)
@@ -192,6 +213,7 @@ export async function createScenario(
 }
 
 export async function updateScenario(id: string, data: Partial<ScenarioData>): Promise<ScenarioData | null> {
+  await requireAuthenticatedUserId()
   try {
     const { salespeople, ...scenarioData } = data
     const snakeCaseData = toSnakeCase(scenarioData)
@@ -259,6 +281,7 @@ export async function updateScenario(id: string, data: Partial<ScenarioData>): P
 }
 
 export async function deleteScenario(id: string): Promise<boolean> {
+  await requireAuthenticatedUserId()
   try {
     // Begin transaction
     await query("BEGIN")
@@ -284,6 +307,7 @@ export async function deleteScenario(id: string): Promise<boolean> {
 
 // Inventory Actions
 export async function getInventory(): Promise<InventoryItem[]> {
+  await requireAuthenticatedUserId()
   try {
     const result = await query(`SELECT * FROM inventory_items ORDER BY created_at DESC`)
 
@@ -297,6 +321,7 @@ export async function getInventory(): Promise<InventoryItem[]> {
 export async function createInventoryItem(
   data: Omit<InventoryItem, "id" | "createdAt" | "updatedAt">,
 ): Promise<InventoryItem | null> {
+  await requireAuthenticatedUserId()
   try {
     const snakeCaseData = toSnakeCase(data)
     const result = await query(
@@ -326,6 +351,7 @@ export async function createInventoryItem(
 }
 
 export async function updateInventoryItem(id: string, data: Partial<InventoryItem>): Promise<InventoryItem | null> {
+  await requireAuthenticatedUserId()
   try {
     const snakeCaseData = toSnakeCase(data)
 
@@ -365,6 +391,7 @@ export async function updateInventoryItem(id: string, data: Partial<InventoryIte
 }
 
 export async function deleteInventoryItem(id: string): Promise<boolean> {
+  await requireAuthenticatedUserId()
   try {
     await query(`DELETE FROM inventory_items WHERE id = $1`, [id])
 
@@ -378,6 +405,7 @@ export async function deleteInventoryItem(id: string): Promise<boolean> {
 
 // Customer Actions
 export async function getCustomers(): Promise<Customer[]> {
+  await requireAuthenticatedUserId()
   try {
     const customersResult = await query(`SELECT * FROM customers ORDER BY created_at DESC`)
 
@@ -400,6 +428,7 @@ export async function getCustomers(): Promise<Customer[]> {
 }
 
 export async function getCustomer(id: string): Promise<Customer | null> {
+  await requireAuthenticatedUserId()
   try {
     const customerResult = await query(`SELECT * FROM customers WHERE id = $1`, [id])
 
@@ -424,6 +453,7 @@ export async function getCustomer(id: string): Promise<Customer | null> {
 export async function createCustomer(
   data: Omit<Customer, "id" | "createdAt" | "updatedAt" | "payments">,
 ): Promise<Customer | null> {
+  await requireAuthenticatedUserId()
   try {
     const snakeCaseData = toSnakeCase(data)
     const result = await query(
@@ -455,6 +485,7 @@ export async function createCustomer(
 }
 
 export async function updateCustomer(id: string, data: Partial<Customer>): Promise<Customer | null> {
+  await requireAuthenticatedUserId()
   try {
     const { payments, ...customerData } = data
     const snakeCaseData = toSnakeCase(customerData)
@@ -497,6 +528,7 @@ export async function updateCustomer(id: string, data: Partial<Customer>): Promi
 }
 
 export async function deleteCustomer(id: string): Promise<boolean> {
+  await requireAuthenticatedUserId()
   try {
     // Begin transaction
     await query("BEGIN")
@@ -525,6 +557,7 @@ export async function addPayment(
   customerId: string,
   data: Omit<Payment, "id" | "createdAt" | "customerId">,
 ): Promise<Payment | null> {
+  await requireAuthenticatedUserId()
   try {
     const snakeCaseData = toSnakeCase(data)
 
@@ -581,6 +614,7 @@ export async function addPayment(
 
 // Transaction Actions
 export async function getTransactions(): Promise<Transaction[]> {
+  await requireAuthenticatedUserId()
   try {
     const result = await query(`SELECT * FROM transactions ORDER BY created_at DESC`)
 
@@ -592,6 +626,7 @@ export async function getTransactions(): Promise<Transaction[]> {
 }
 
 export async function createTransaction(data: Omit<Transaction, "id" | "createdAt">): Promise<Transaction | null> {
+  await requireAuthenticatedUserId()
   try {
     const snakeCaseData = toSnakeCase(data)
 
@@ -676,6 +711,7 @@ export async function createTransaction(data: Omit<Transaction, "id" | "createdA
 
 // Account Actions
 export async function getAccounts(): Promise<Account[]> {
+  await requireAuthenticatedUserId()
   try {
     const result = await query(`SELECT * FROM accounts ORDER BY created_at DESC`)
 
@@ -687,6 +723,7 @@ export async function getAccounts(): Promise<Account[]> {
 }
 
 export async function createAccount(data: Omit<Account, "id" | "createdAt" | "updatedAt">): Promise<Account | null> {
+  await requireAuthenticatedUserId()
   try {
     const snakeCaseData = toSnakeCase(data)
     const result = await query(
@@ -706,6 +743,7 @@ export async function createAccount(data: Omit<Account, "id" | "createdAt" | "up
 }
 
 export async function updateAccount(id: string, data: Partial<Account>): Promise<Account | null> {
+  await requireAuthenticatedUserId()
   try {
     const snakeCaseData = toSnakeCase(data)
 
@@ -745,6 +783,7 @@ export async function updateAccount(id: string, data: Partial<Account>): Promise
 }
 
 export async function deleteAccount(id: string): Promise<boolean> {
+  await requireAuthenticatedUserId()
   try {
     await query(`DELETE FROM accounts WHERE id = $1`, [id])
 
@@ -758,6 +797,7 @@ export async function deleteAccount(id: string): Promise<boolean> {
 
 // Initialize default business data if none exists
 export async function initializeDefaultBusinessData(): Promise<BusinessData | null> {
+  await requireAuthenticatedUserId()
   try {
     const existingDataResult = await query(`SELECT * FROM business_data LIMIT 1`)
 

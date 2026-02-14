@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import CashRegister from "@/components/cash-register"
-import { initializeDefaultBusinessData } from "@/app/actions"
+import { initializeDefaultBusinessData } from "@/lib/facade/server"
 
 export default function HomePage() {
   const [isLoading, setIsLoading] = useState(true)

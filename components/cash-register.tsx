@@ -12,7 +12,7 @@ import { HustleTip } from "@/components/hustle-tip"
 import { HustleStat } from "@/components/hustle-stat"
 import type { Customer, InventoryItem, Transaction } from "@/lib/types"
 import { formatCurrency, formatGrams, formatOunces, ouncesToGrams } from "@/lib/utils"
-import { getInventory, getCustomers, createTransaction, addPayment } from "@/app/actions"
+import { getInventory, getCustomers, createTransaction, addPayment } from "@/lib/facade/server"
 
 interface CashRegisterProps {
   showTips: boolean
