@@ -1,0 +1,24 @@
+name: Branch Protection Checks
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  pr-guardrails:
+    name: PR guardrails
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate PR title format
+        run: |
+          title="${{ github.event.pull_request.title }}"
+          echo "PR title: $title"
+          echo "$title" | grep -E '^(feat|fix|chore|docs|refactor|test|ci|build|perf)(\(.+\))?: .+'
+
+      - name: Ensure PR is not draft
+        run: |
+          if [ "${{ github.event.pull_request.draft }}" = "true" ]; then
+            echo "Draft PRs cannot pass protected-branch checks."
+            exit 1
+          fi

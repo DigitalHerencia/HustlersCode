@@ -1,188 +1,74 @@
-<!-- HustlersCode - Street Business Analytics -->
+# HustlersCode
 
-<h1 align="center">💰 HustlersCode 📊</h1>
+Production-grade Next.js 14 application for street-business analytics (inventory, customers, transactions, and profitability) with PostgreSQL-backed data workflows.
 
-<p align="center">
-  <b>Next-Level Street Business Analytics Platform</b><br/>
-  <a href="#features">Features</a> • <a href="#tech-stack">Tech Stack</a> • <a href="#getting-started">Getting Started</a> • <a href="#the-code">The Code</a>
-</p>
+## Architecture
 
-<p align="center">
-  <img src="https://img.shields.io/badge/Next.js-14-black?logo=next.js" alt="Next.js"/>
-  <img src="https://img.shields.io/badge/TypeScript-blue?logo=typescript" alt="TypeScript"/>
-  <img src="https://img.shields.io/badge/PostgreSQL-Powered-336791?logo=postgresql" alt="PostgreSQL"/>
-  <img src="https://img.shields.io/badge/Status-Getting%20Money-gold" alt="Status"/>
-</p>
+- **Presentation**: Next.js App Router pages and UI components in `app/` + `components/`.
+- **Application layer**: Orchestration logic and helper hooks in `hooks/`.
+- **Domain + infrastructure**: Shared business utilities and data adapters in `lib/` and `db/`.
+- **Styling/UI system**: Tailwind CSS with shadcn/ui primitives.
 
----
+## Tech Stack
 
-> **HustlersCode** is the ultimate street-smart business analytics platform. Track your inventory, manage your clients, handle transactions, and analyze your profits like a boss. Built for entrepreneurs who understand that knowledge is power and data is money. 💯
+- Next.js 14 (App Router)
+- TypeScript
+- Tailwind CSS
+- PostgreSQL
+- ESLint + Prettier + Husky + lint-staged
+- GitHub Actions (CI + deployment)
 
----
-
-## 🔥 Features
-
-- **💳 Cash Register:** Lightning-fast POS system with smart pricing and payment tracking
-- **📦 Inventory Management:** Track your products, costs, and profits down to the gram
-- **🤝 Client Management:** Keep tabs on who owes you and collect your money on time
-- **📊 Business Analytics:** Real-time dashboards showing profit margins and performance
-- **🎯 Pricing Scenarios:** Test different pricing strategies to maximize your hustle
-- **📱 Mobile Ready:** Run your business from anywhere with responsive design
-- **🌙 Street Mode:** Dark theme optimized for late-night operations
-- **⚡ Fast AF:** Built with Next.js for blazing speed and reliability
-
----
-
-## 🛠️ Tech Stack
-
-- **Frontend:** Next.js 14 (App Router), TypeScript, Tailwind CSS
-- **UI Components:** shadcn/ui with custom gangster theming
-- **Database:** PostgreSQL (Neon DB), Prisma ORM  
-- **Styling:** Custom CSS with street-inspired color scheme
-- **Fonts:** Permanent Marker (graffiti style) + Inter (clean business)
-- **Analytics:** Real-time profit tracking and business intelligence
-- **Deployment:** Vercel-ready with edge optimization
-
----
-
-<p align="center">
-  <img src="https://raw.githubusercontent.com/DigitalHerencia/HustlersCode/refs/heads/main/public/Screenshot_4-9-2025_171730_hustlerscode.vercel.app.jpeg" alt="HustlersCode Screenshot" width="100%" style="border-radius:12px;margin:1rem 0;">
-</p>
-
----
-## 🚀 Getting Started
+## Local Development
 
 ### Prerequisites
 
-- Node.js 18+ (the foundation)
-- PostgreSQL database (Neon DB recommended)
-- A hustle mindset 😤
+- Node.js 20+
+- npm 10+
+- PostgreSQL connection string
 
-### Quick Setup
+### Setup
 
 ```bash
-# Clone the repo
-git clone https://github.com/DigitalHerencia/HustlersCode.git
-cd HustlersCode
-
-# Install dependencies
-npm install
-
-# Set up your environment
+npm ci
 cp .env.example .env.local
-# Edit .env.local with your DATABASE_URL
 ```
 
-### Environment Variables
+Configure `.env.local` with required values such as `DATABASE_URL`.
 
-Create a `.env.local` file with your database connection:
-
-```env
-DATABASE_URL="postgresql://username:password@host:port/database"
-```
-
-### Database Setup
+### Commands
 
 ```bash
-# Initialize the database
-npx prisma migrate dev --name init
-
-# Seed with starter data
-npm run seed
+npm run dev           # local server
+npm run lint          # eslint checks
+npm run lint:fix      # eslint autofix
+npm run typecheck     # tsc --noEmit
+npm run test          # node test runner
+npm run build         # production build
+npm run format        # prettier write
+npm run format:check  # prettier check
 ```
 
-### Launch Your Empire
+## CI / Branch Standards
 
-```bash
-# Start the development server
-npm run dev
+GitHub Actions workflows:
 
-# Open http://localhost:3000 and start making money
-```
+- `CI`: runs lint, typecheck, tests, and build on pull requests and pushes to `main`.
+- `Branch Protection Checks`: enforces PR title format and blocks draft PRs from passing checks.
+- `Vercel Deploy`: deploys preview builds for PRs and production builds for `main`.
 
----
+Recommended branch protection for `main`:
 
-## 📈 The Code
+- Require PR before merge
+- Require status checks: `Lint, Typecheck, Test, Build` and `PR guardrails`
+- Require up-to-date branches before merge
 
-### Database Schema
+## Deployment
 
-Built on Prisma ORM with business-focused models:
+Vercel deployment details and required secrets are documented in [`docs/deployment-vercel.md`](docs/deployment-vercel.md).
 
-- **BusinessData:** Your empire's core settings and configuration
-- **InventoryItem:** Product catalog with cost tracking and profit margins  
-- **Customer:** Client database with payment history and debt tracking
-- **Transaction:** Every sale, every payment, every move tracked
-- **Payment:** Money in, money out - all accounted for
-- **Scenario:** Test pricing strategies before you commit
-- **Account:** Financial accounts and cash flow management
+## Governance
 
-### Key Components
-
-- **Cash Register:** The heart of daily operations
-- **Customer Analytics:** Know your clients, collect your money
-- **Inventory Tracker:** Never run out, never lose profit
-- **Hustle Stats:** Real-time business intelligence
-- **Profit Dashboard:** See where your money comes from
-
----
-
-## 🎨 Design Philosophy
-
-HustlersCode combines street-smart functionality with clean, professional design:
-
-- **Color Scheme:** Gold, blood red, midnight black, smoke gray
-- **Typography:** Permanent Marker for headers, Inter for business
-- **Sharp Edges:** No rounded corners - we keep it real
-- **Dark Mode:** Optimized for late-night operations
-- **Mobile First:** Business doesn't stop when you're on the move
-
----
-
-## 🚀 Deployment
-
-Deploy to Vercel in minutes:
-
-1. Push your code to GitHub
-2. Connect to Vercel
-3. Add your environment variables
-4. Deploy and start collecting that money!
-
-```bash
-# Build for production
-npm run build
-
-# Start production server
-npm start
-```
-
----
-
-## 📚 Documentation
-
-- **User Guide:** See the `/docs` folder for operational guides
-- **API Reference:** Built-in API routes for data management
-- **Component Library:** Reusable components with street style
-
----
-
-## 💪 The Hustle Never Stops
-
-- **Branch Strategy:** `feature/new-hustle`, `fix/money-problems`
-- **Code Quality:** ESLint, TypeScript strict mode
-- **Performance:** Optimized for speed and reliability
-- **Security:** Your data stays secure, your business stays private
-
----
-
-<p align="center">
-  <b>HustlersCode – Where Data Meets Street Smarts 💰📊</b><br/>
-  <em>Remember: Knowledge is power, but applied knowledge is profit.</em>
-</p>
-
----
-
-## 📄 License
-
-MIT License - Build your empire, share the knowledge.
-
-<!-- End of README -->
+- Ownership: [`.github/CODEOWNERS`](.github/CODEOWNERS)
+- Security reporting: [`SECURITY.md`](SECURITY.md)
+- Contributor support: [`SUPPORT.md`](SUPPORT.md)
+- License: [`LICENSE`](LICENSE)

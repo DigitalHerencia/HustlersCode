@@ -1,0 +1,10 @@
+# Default ownership
+* @DigitalHerencia
+
+# CI/CD and automation
+/.github/ @DigitalHerencia
+
+# Core app code
+/app/ @DigitalHerencia
+/components/ @DigitalHerencia
+/lib/ @DigitalHerencia
