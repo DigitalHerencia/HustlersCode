@@ -6,24 +6,122 @@ import "server-only"
 import { revalidatePath } from "next/cache"
 import { query, toCamelCase, toSnakeCase } from "@/lib/db"
 import type { BusinessData, ScenarioData, InventoryItem, Customer, Payment, Transaction, Account } from "@/lib/types"
-import { auth } from "@clerk/nextjs/server"
+import { z } from "zod"
 
+const idSchema = z.string().trim().min(1)
 
-async function requireAuthenticatedUserId(): Promise<string> {
-  const { userId } = await auth()
+const businessDataCreateSchema = z
+  .object({
+    wholesalePricePerOz: z.number().finite(),
+    targetProfitPerMonth: z.number().finite(),
+    operatingExpenses: z.number().finite(),
+  })
+  .strict()
 
-  if (!userId) {
-    throw new Error("Unauthorized")
-  }
+const businessDataUpdateSchema = businessDataCreateSchema.partial().strict()
 
-  return userId
-}
+const salespersonInputSchema = z
+  .object({
+    name: z.string().trim().min(1),
+    commissionRate: z.number().finite(),
+    salesQuantity: z.number().finite(),
+  })
+  .strict()
 
-const isPrismaNotFound = (error: unknown): boolean =>
-  error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025"
+const scenarioCreateSchema = z
+  .object({
+    name: z.string().trim().min(1),
+    description: z.string().nullable(),
+    wholesalePrice: z.number().finite(),
+    retailPrice: z.number().finite(),
+    quantity: z.number().finite(),
+    timePeriod: z.string().trim().min(1),
+    expenses: z.number().finite(),
+    salespeople: z.array(salespersonInputSchema),
+  })
+  .strict()
 
-const isPrismaNotFound = (error: unknown): boolean =>
-  error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025"
+const scenarioUpdateSchema = z
+  .object({
+    name: z.string().trim().min(1).optional(),
+    description: z.string().nullable().optional(),
+    wholesalePrice: z.number().finite().optional(),
+    retailPrice: z.number().finite().optional(),
+    quantity: z.number().finite().optional(),
+    timePeriod: z.string().trim().min(1).optional(),
+    expenses: z.number().finite().optional(),
+    salespeople: z.array(salespersonInputSchema).optional(),
+  })
+  .strict()
+
+const inventoryCreateSchema = z
+  .object({
+    name: z.string().trim().min(1),
+    description: z.string().nullable(),
+    quantityG: z.number().finite(),
+    quantityOz: z.number().finite(),
+    quantityKg: z.number().finite(),
+    purchaseDate: z.string().trim().min(1),
+    costPerOz: z.number().finite(),
+    totalCost: z.number().finite(),
+    reorderThresholdG: z.number().finite(),
+  })
+  .strict()
+
+const inventoryUpdateSchema = inventoryCreateSchema.partial().strict()
+
+const customerCreateSchema = z
+  .object({
+    name: z.string().trim().min(1),
+    phone: z.string().nullable(),
+    email: z.string().nullable(),
+    address: z.string().nullable(),
+    amountOwed: z.number().finite(),
+    dueDate: z.string().nullable(),
+    status: z.string().trim().min(1),
+    notes: z.string().nullable(),
+  })
+  .strict()
+
+const customerUpdateSchema = customerCreateSchema.partial().strict()
+
+const paymentCreateSchema = z
+  .object({
+    amount: z.number().finite(),
+    date: z.string().trim().min(1),
+    method: z.string().trim().min(1),
+    notes: z.string().nullable(),
+  })
+  .strict()
+
+const transactionCreateSchema = z
+  .object({
+    date: z.string().trim().min(1),
+    type: z.string().trim().min(1),
+    inventoryId: z.string().nullable(),
+    inventoryName: z.string().nullable(),
+    quantityGrams: z.number().finite(),
+    pricePerGram: z.number().finite(),
+    totalPrice: z.number().finite(),
+    cost: z.number().finite(),
+    profit: z.number().finite(),
+    paymentMethod: z.string().trim().min(1),
+    customerId: z.string().nullable(),
+    customerName: z.string().nullable(),
+    notes: z.string().nullable(),
+  })
+  .strict()
+
+const accountCreateSchema = z
+  .object({
+    name: z.string().trim().min(1),
+    type: z.string().trim().min(1),
+    balance: z.number().finite(),
+    description: z.string().nullable(),
+  })
+  .strict()
+
+const accountUpdateSchema = accountCreateSchema.partial().strict()
 
 // Business Data Actions
 export async function getBusinessData(): Promise<BusinessData | null> {
@@ -39,9 +137,17 @@ export async function getBusinessData(): Promise<BusinessData | null> {
 export async function saveBusinessData(
   data: Omit<BusinessData, "id" | "createdAt" | "updatedAt">,
 ): Promise<BusinessData | null> {
-  await requireAuthenticatedUserId()
   try {
-    const result = await repositories.businessData.create(data)
+    const parsedData = businessDataCreateSchema.parse(data)
+    const snakeCaseData = toSnakeCase(parsedData)
+    const result = await query(
+      `INSERT INTO business_data 
+       (wholesale_price_per_oz, target_profit_per_month, operating_expenses) 
+       VALUES ($1, $2, $3) 
+       RETURNING *`,
+      [snakeCaseData.wholesale_price_per_oz, snakeCaseData.target_profit_per_month, snakeCaseData.operating_expenses],
+    )
+
     revalidatePath("/")
     return result
   } catch (error) {
@@ -51,9 +157,32 @@ export async function saveBusinessData(
 }
 
 export async function updateBusinessData(id: string, data: Partial<BusinessData>): Promise<BusinessData | null> {
-  await requireAuthenticatedUserId()
   try {
-    const result = await repositories.businessData.update(id, data)
+    const parsedId = idSchema.parse(id)
+    const parsedData = businessDataUpdateSchema.parse(data)
+    const hasWholesalePricePerOz = Object.prototype.hasOwnProperty.call(parsedData, "wholesalePricePerOz")
+    const hasTargetProfitPerMonth = Object.prototype.hasOwnProperty.call(parsedData, "targetProfitPerMonth")
+    const hasOperatingExpenses = Object.prototype.hasOwnProperty.call(parsedData, "operatingExpenses")
+
+    const result = await query(
+      `UPDATE business_data
+       SET wholesale_price_per_oz = CASE WHEN $1 THEN $2 ELSE wholesale_price_per_oz END,
+           target_profit_per_month = CASE WHEN $3 THEN $4 ELSE target_profit_per_month END,
+           operating_expenses = CASE WHEN $5 THEN $6 ELSE operating_expenses END,
+           updated_at = NOW()
+       WHERE id = $7
+       RETURNING *`,
+      [
+        hasWholesalePricePerOz,
+        parsedData.wholesalePricePerOz,
+        hasTargetProfitPerMonth,
+        parsedData.targetProfitPerMonth,
+        hasOperatingExpenses,
+        parsedData.operatingExpenses,
+        parsedId,
+      ],
+    )
+
     revalidatePath("/")
     return result
   } catch (error) {
@@ -74,9 +203,22 @@ export async function getScenarios(): Promise<ScenarioData[]> {
 }
 
 export async function getScenario(id: string): Promise<ScenarioData | null> {
-  await requireAuthenticatedUserId()
   try {
-    return await repositories.scenarios.getById(id)
+    const parsedId = idSchema.parse(id)
+    const scenarioResult = await query(`SELECT * FROM scenarios WHERE id = $1`, [parsedId])
+
+    if (scenarioResult.rows.length === 0) {
+      return null
+    }
+
+    const scenario = toCamelCase(scenarioResult.rows[0])
+
+    // Fetch salespeople for this scenario
+    const salespeopleResult = await query(`SELECT * FROM salespeople WHERE scenario_id = $1`, [parsedId])
+
+    scenario.salespeople = toCamelCase(salespeopleResult.rows)
+
+    return scenario
   } catch (error) {
     console.error("Error fetching scenario:", error)
     return null
@@ -87,7 +229,8 @@ export async function createScenario(
   data: Omit<ScenarioData, "id" | "createdAt" | "updatedAt">,
 ): Promise<ScenarioData | null> {
   try {
-    const { salespeople, ...scenarioData } = data
+    const parsedData = scenarioCreateSchema.parse(data)
+    const { salespeople, ...scenarioData } = parsedData
     const snakeCaseData = toSnakeCase(scenarioData)
 
     // Begin transaction
@@ -144,42 +287,65 @@ export async function createScenario(
 
 export async function updateScenario(id: string, data: Partial<ScenarioData>): Promise<ScenarioData | null> {
   try {
-    const { salespeople, ...scenarioData } = data
-    const snakeCaseData = toSnakeCase(scenarioData)
+    const parsedId = idSchema.parse(id)
+    const parsedData = scenarioUpdateSchema.parse(data)
+    const { salespeople, ...scenarioData } = parsedData
 
     // Begin transaction
     await query("BEGIN")
 
-    // Build dynamic query for scenario update
-    if (Object.keys(snakeCaseData).length > 0) {
-      const updates: string[] = []
-      const values: any[] = []
-      let paramIndex = 1
+    const hasName = Object.prototype.hasOwnProperty.call(scenarioData, "name")
+    const hasDescription = Object.prototype.hasOwnProperty.call(scenarioData, "description")
+    const hasWholesalePrice = Object.prototype.hasOwnProperty.call(scenarioData, "wholesalePrice")
+    const hasRetailPrice = Object.prototype.hasOwnProperty.call(scenarioData, "retailPrice")
+    const hasQuantity = Object.prototype.hasOwnProperty.call(scenarioData, "quantity")
+    const hasTimePeriod = Object.prototype.hasOwnProperty.call(scenarioData, "timePeriod")
+    const hasExpenses = Object.prototype.hasOwnProperty.call(scenarioData, "expenses")
 
-      for (const [key, value] of Object.entries(snakeCaseData)) {
-        updates.push(`${key} = $${paramIndex}`)
-        values.push(value)
-        paramIndex++
-      }
-
-      // Add updated_at timestamp
-      updates.push(`updated_at = NOW()`)
-
-      // Add id as the last parameter
-      values.push(id)
-
+    if (
+      hasName ||
+      hasDescription ||
+      hasWholesalePrice ||
+      hasRetailPrice ||
+      hasQuantity ||
+      hasTimePeriod ||
+      hasExpenses
+    ) {
       await query(
-        `UPDATE scenarios 
-         SET ${updates.join(", ")} 
-         WHERE id = $${paramIndex}`,
-        values,
+        `UPDATE scenarios
+         SET name = CASE WHEN $1 THEN $2 ELSE name END,
+             description = CASE WHEN $3 THEN $4 ELSE description END,
+             wholesale_price = CASE WHEN $5 THEN $6 ELSE wholesale_price END,
+             retail_price = CASE WHEN $7 THEN $8 ELSE retail_price END,
+             quantity = CASE WHEN $9 THEN $10 ELSE quantity END,
+             time_period = CASE WHEN $11 THEN $12 ELSE time_period END,
+             expenses = CASE WHEN $13 THEN $14 ELSE expenses END,
+             updated_at = NOW()
+         WHERE id = $15`,
+        [
+          hasName,
+          scenarioData.name,
+          hasDescription,
+          scenarioData.description,
+          hasWholesalePrice,
+          scenarioData.wholesalePrice,
+          hasRetailPrice,
+          scenarioData.retailPrice,
+          hasQuantity,
+          scenarioData.quantity,
+          hasTimePeriod,
+          scenarioData.timePeriod,
+          hasExpenses,
+          scenarioData.expenses,
+          parsedId,
+        ],
       )
     }
 
     // Update salespeople if provided
     if (salespeople) {
       // Delete existing salespeople
-      await query(`DELETE FROM salespeople WHERE scenario_id = $1`, [id])
+      await query(`DELETE FROM salespeople WHERE scenario_id = $1`, [parsedId])
 
       // Insert new salespeople
       for (const person of salespeople) {
@@ -188,7 +354,7 @@ export async function updateScenario(id: string, data: Partial<ScenarioData>): P
           `INSERT INTO salespeople
            (scenario_id, name, commission_rate, sales_quantity)
            VALUES ($1, $2, $3, $4)`,
-          [id, snakeCasePerson.name, snakeCasePerson.commission_rate, snakeCasePerson.sales_quantity],
+          [parsedId, snakeCasePerson.name, snakeCasePerson.commission_rate, snakeCasePerson.sales_quantity],
         )
       }
     }
@@ -197,7 +363,7 @@ export async function updateScenario(id: string, data: Partial<ScenarioData>): P
     await query("COMMIT")
 
     // Fetch the updated scenario with salespeople
-    const result = await getScenario(id)
+    const result = await getScenario(parsedId)
 
     revalidatePath("/")
     return result
@@ -212,14 +378,16 @@ export async function updateScenario(id: string, data: Partial<ScenarioData>): P
 
 export async function deleteScenario(id: string): Promise<boolean> {
   try {
+    const parsedId = idSchema.parse(id)
+
     // Begin transaction
     await query("BEGIN")
 
     // Delete salespeople first (foreign key constraint)
-    await query(`DELETE FROM salespeople WHERE scenario_id = $1`, [id])
+    await query(`DELETE FROM salespeople WHERE scenario_id = $1`, [parsedId])
 
     // Delete scenario
-    await query(`DELETE FROM scenarios WHERE id = $1`, [id])
+    await query(`DELETE FROM scenarios WHERE id = $1`, [parsedId])
 
     // Commit transaction
     await query("COMMIT")
@@ -249,9 +417,27 @@ export async function getInventory(): Promise<InventoryItem[]> {
 export async function createInventoryItem(
   data: Omit<InventoryItem, "id" | "createdAt" | "updatedAt">,
 ): Promise<InventoryItem | null> {
-  await requireAuthenticatedUserId()
   try {
-    const result = await repositories.inventory.create(data)
+    const parsedData = inventoryCreateSchema.parse(data)
+    const snakeCaseData = toSnakeCase(parsedData)
+    const result = await query(
+      `INSERT INTO inventory_items 
+       (name, description, quantity_g, quantity_oz, quantity_kg, purchase_date, cost_per_oz, total_cost, reorder_threshold_g)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       RETURNING *`,
+      [
+        snakeCaseData.name,
+        snakeCaseData.description,
+        snakeCaseData.quantity_g,
+        snakeCaseData.quantity_oz,
+        snakeCaseData.quantity_kg,
+        snakeCaseData.purchase_date,
+        snakeCaseData.cost_per_oz,
+        snakeCaseData.total_cost,
+        snakeCaseData.reorder_threshold_g,
+      ],
+    )
+
     revalidatePath("/")
     return result
   } catch (error) {
@@ -261,9 +447,56 @@ export async function createInventoryItem(
 }
 
 export async function updateInventoryItem(id: string, data: Partial<InventoryItem>): Promise<InventoryItem | null> {
-  await requireAuthenticatedUserId()
   try {
-    const result = await repositories.inventory.update(id, data)
+    const parsedId = idSchema.parse(id)
+    const parsedData = inventoryUpdateSchema.parse(data)
+    const hasName = Object.prototype.hasOwnProperty.call(parsedData, "name")
+    const hasDescription = Object.prototype.hasOwnProperty.call(parsedData, "description")
+    const hasQuantityG = Object.prototype.hasOwnProperty.call(parsedData, "quantityG")
+    const hasQuantityOz = Object.prototype.hasOwnProperty.call(parsedData, "quantityOz")
+    const hasQuantityKg = Object.prototype.hasOwnProperty.call(parsedData, "quantityKg")
+    const hasPurchaseDate = Object.prototype.hasOwnProperty.call(parsedData, "purchaseDate")
+    const hasCostPerOz = Object.prototype.hasOwnProperty.call(parsedData, "costPerOz")
+    const hasTotalCost = Object.prototype.hasOwnProperty.call(parsedData, "totalCost")
+    const hasReorderThresholdG = Object.prototype.hasOwnProperty.call(parsedData, "reorderThresholdG")
+
+    const result = await query(
+      `UPDATE inventory_items
+       SET name = CASE WHEN $1 THEN $2 ELSE name END,
+           description = CASE WHEN $3 THEN $4 ELSE description END,
+           quantity_g = CASE WHEN $5 THEN $6 ELSE quantity_g END,
+           quantity_oz = CASE WHEN $7 THEN $8 ELSE quantity_oz END,
+           quantity_kg = CASE WHEN $9 THEN $10 ELSE quantity_kg END,
+           purchase_date = CASE WHEN $11 THEN $12 ELSE purchase_date END,
+           cost_per_oz = CASE WHEN $13 THEN $14 ELSE cost_per_oz END,
+           total_cost = CASE WHEN $15 THEN $16 ELSE total_cost END,
+           reorder_threshold_g = CASE WHEN $17 THEN $18 ELSE reorder_threshold_g END,
+           updated_at = NOW()
+       WHERE id = $19
+       RETURNING *`,
+      [
+        hasName,
+        parsedData.name,
+        hasDescription,
+        parsedData.description,
+        hasQuantityG,
+        parsedData.quantityG,
+        hasQuantityOz,
+        parsedData.quantityOz,
+        hasQuantityKg,
+        parsedData.quantityKg,
+        hasPurchaseDate,
+        parsedData.purchaseDate,
+        hasCostPerOz,
+        parsedData.costPerOz,
+        hasTotalCost,
+        parsedData.totalCost,
+        hasReorderThresholdG,
+        parsedData.reorderThresholdG,
+        parsedId,
+      ],
+    )
+
     revalidatePath("/")
     return result
   } catch (error) {
@@ -278,7 +511,9 @@ export async function updateInventoryItem(id: string, data: Partial<InventoryIte
 export async function deleteInventoryItem(id: string): Promise<boolean> {
   await requireAuthenticatedUserId()
   try {
-    await repositories.inventory.delete(id)
+    const parsedId = idSchema.parse(id)
+    await query(`DELETE FROM inventory_items WHERE id = $1`, [parsedId])
+
     revalidatePath("/")
     return true
   } catch (error) {
@@ -302,9 +537,22 @@ export async function getCustomers(): Promise<Customer[]> {
 }
 
 export async function getCustomer(id: string): Promise<Customer | null> {
-  await requireAuthenticatedUserId()
   try {
-    return await repositories.customers.getById(id)
+    const parsedId = idSchema.parse(id)
+    const customerResult = await query(`SELECT * FROM customers WHERE id = $1`, [parsedId])
+
+    if (customerResult.rows.length === 0) {
+      return null
+    }
+
+    const customer = toCamelCase(customerResult.rows[0])
+
+    // Fetch payments for this customer
+    const paymentsResult = await query(`SELECT * FROM payments WHERE customer_id = $1 ORDER BY date DESC`, [parsedId])
+
+    customer.payments = toCamelCase(paymentsResult.rows)
+
+    return customer
   } catch (error) {
     console.error("Error fetching customer:", error)
     return null
@@ -314,9 +562,29 @@ export async function getCustomer(id: string): Promise<Customer | null> {
 export async function createCustomer(
   data: Omit<Customer, "id" | "createdAt" | "updatedAt" | "payments">,
 ): Promise<Customer | null> {
-  await requireAuthenticatedUserId()
   try {
-    const result = await repositories.customers.create(data)
+    const parsedData = customerCreateSchema.parse(data)
+    const snakeCaseData = toSnakeCase(parsedData)
+    const result = await query(
+      `INSERT INTO customers 
+       (name, phone, email, address, amount_owed, due_date, status, notes)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       RETURNING *`,
+      [
+        snakeCaseData.name,
+        snakeCaseData.phone,
+        snakeCaseData.email,
+        snakeCaseData.address,
+        snakeCaseData.amount_owed,
+        snakeCaseData.due_date,
+        snakeCaseData.status,
+        snakeCaseData.notes,
+      ],
+    )
+
+    const customer = toCamelCase(result.rows[0])
+    customer.payments = []
+
     revalidatePath("/")
     return result
   } catch (error) {
@@ -326,9 +594,55 @@ export async function createCustomer(
 }
 
 export async function updateCustomer(id: string, data: Partial<Customer>): Promise<Customer | null> {
-  await requireAuthenticatedUserId()
   try {
-    const result = await repositories.customers.update(id, data)
+    const parsedId = idSchema.parse(id)
+    const parsedData = customerUpdateSchema.parse(data)
+
+    const hasName = Object.prototype.hasOwnProperty.call(parsedData, "name")
+    const hasPhone = Object.prototype.hasOwnProperty.call(parsedData, "phone")
+    const hasEmail = Object.prototype.hasOwnProperty.call(parsedData, "email")
+    const hasAddress = Object.prototype.hasOwnProperty.call(parsedData, "address")
+    const hasAmountOwed = Object.prototype.hasOwnProperty.call(parsedData, "amountOwed")
+    const hasDueDate = Object.prototype.hasOwnProperty.call(parsedData, "dueDate")
+    const hasStatus = Object.prototype.hasOwnProperty.call(parsedData, "status")
+    const hasNotes = Object.prototype.hasOwnProperty.call(parsedData, "notes")
+
+    await query(
+      `UPDATE customers
+       SET name = CASE WHEN $1 THEN $2 ELSE name END,
+           phone = CASE WHEN $3 THEN $4 ELSE phone END,
+           email = CASE WHEN $5 THEN $6 ELSE email END,
+           address = CASE WHEN $7 THEN $8 ELSE address END,
+           amount_owed = CASE WHEN $9 THEN $10 ELSE amount_owed END,
+           due_date = CASE WHEN $11 THEN $12 ELSE due_date END,
+           status = CASE WHEN $13 THEN $14 ELSE status END,
+           notes = CASE WHEN $15 THEN $16 ELSE notes END,
+           updated_at = NOW()
+       WHERE id = $17`,
+      [
+        hasName,
+        parsedData.name,
+        hasPhone,
+        parsedData.phone,
+        hasEmail,
+        parsedData.email,
+        hasAddress,
+        parsedData.address,
+        hasAmountOwed,
+        parsedData.amountOwed,
+        hasDueDate,
+        parsedData.dueDate,
+        hasStatus,
+        parsedData.status,
+        hasNotes,
+        parsedData.notes,
+        parsedId,
+      ],
+    )
+
+    // Fetch the updated customer with payments
+    const result = await getCustomer(parsedId)
+
     revalidatePath("/")
     return result
   } catch (error) {
@@ -346,10 +660,11 @@ export async function deleteCustomer(id: string): Promise<boolean> {
     await query("BEGIN")
 
     // Delete payments first (foreign key constraint)
-    await query(`DELETE FROM payments WHERE customer_id = $1`, [id])
+    const parsedId = idSchema.parse(id)
+    await query(`DELETE FROM payments WHERE customer_id = $1`, [parsedId])
 
     // Delete customer
-    await query(`DELETE FROM customers WHERE id = $1`, [id])
+    await query(`DELETE FROM customers WHERE id = $1`, [parsedId])
 
     // Commit transaction
     await query("COMMIT")
@@ -371,7 +686,9 @@ export async function addPayment(
   data: Omit<Payment, "id" | "createdAt" | "customerId">,
 ): Promise<Payment | null> {
   try {
-    const snakeCaseData = toSnakeCase(data)
+    const parsedCustomerId = idSchema.parse(customerId)
+    const parsedData = paymentCreateSchema.parse(data)
+    const snakeCaseData = toSnakeCase(parsedData)
 
     // Begin transaction
     await query("BEGIN")
@@ -382,11 +699,11 @@ export async function addPayment(
        (customer_id, amount, date, method, notes)
        VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
-      [customerId, snakeCaseData.amount, snakeCaseData.date, snakeCaseData.method, snakeCaseData.notes],
+      [parsedCustomerId, snakeCaseData.amount, snakeCaseData.date, snakeCaseData.method, snakeCaseData.notes],
     )
 
     // Get the customer
-    const customerResult = await query(`SELECT * FROM customers WHERE id = $1`, [customerId])
+    const customerResult = await query(`SELECT * FROM customers WHERE id = $1`, [parsedCustomerId])
 
     if (customerResult.rows.length > 0) {
       const customer = customerResult.rows[0]
@@ -407,7 +724,7 @@ export async function addPayment(
         `UPDATE customers 
          SET amount_owed = $1, status = $2, updated_at = NOW() 
          WHERE id = $3`,
-        [newAmountOwed, newStatus, customerId],
+        [newAmountOwed, newStatus, parsedCustomerId],
       )
     }
 
@@ -438,7 +755,8 @@ export async function getTransactions(): Promise<Transaction[]> {
 
 export async function createTransaction(data: Omit<Transaction, "id" | "createdAt">): Promise<Transaction | null> {
   try {
-    const snakeCaseData = toSnakeCase(data)
+    const parsedData = transactionCreateSchema.parse(data)
+    const snakeCaseData = toSnakeCase(parsedData)
 
     // Begin transaction
     await query("BEGIN")
@@ -532,9 +850,17 @@ export async function getAccounts(): Promise<Account[]> {
 }
 
 export async function createAccount(data: Omit<Account, "id" | "createdAt" | "updatedAt">): Promise<Account | null> {
-  await requireAuthenticatedUserId()
   try {
-    const result = await repositories.accounts.create(data)
+    const parsedData = accountCreateSchema.parse(data)
+    const snakeCaseData = toSnakeCase(parsedData)
+    const result = await query(
+      `INSERT INTO accounts 
+       (name, type, balance, description)
+       VALUES ($1, $2, $3, $4)
+       RETURNING *`,
+      [snakeCaseData.name, snakeCaseData.type, snakeCaseData.balance, snakeCaseData.description],
+    )
+
     revalidatePath("/")
     return result
   } catch (error) {
@@ -544,9 +870,27 @@ export async function createAccount(data: Omit<Account, "id" | "createdAt" | "up
 }
 
 export async function updateAccount(id: string, data: Partial<Account>): Promise<Account | null> {
-  await requireAuthenticatedUserId()
   try {
-    const result = await repositories.accounts.update(id, data)
+    const parsedId = idSchema.parse(id)
+    const parsedData = accountUpdateSchema.parse(data)
+
+    const hasName = Object.prototype.hasOwnProperty.call(parsedData, "name")
+    const hasType = Object.prototype.hasOwnProperty.call(parsedData, "type")
+    const hasBalance = Object.prototype.hasOwnProperty.call(parsedData, "balance")
+    const hasDescription = Object.prototype.hasOwnProperty.call(parsedData, "description")
+
+    const result = await query(
+      `UPDATE accounts
+       SET name = CASE WHEN $1 THEN $2 ELSE name END,
+           type = CASE WHEN $3 THEN $4 ELSE type END,
+           balance = CASE WHEN $5 THEN $6 ELSE balance END,
+           description = CASE WHEN $7 THEN $8 ELSE description END,
+           updated_at = NOW()
+       WHERE id = $9
+       RETURNING *`,
+      [hasName, parsedData.name, hasType, parsedData.type, hasBalance, parsedData.balance, hasDescription, parsedData.description, parsedId],
+    )
+
     revalidatePath("/")
     return result
   } catch (error) {
@@ -561,7 +905,9 @@ export async function updateAccount(id: string, data: Partial<Account>): Promise
 export async function deleteAccount(id: string): Promise<boolean> {
   await requireAuthenticatedUserId()
   try {
-    await repositories.accounts.delete(id)
+    const parsedId = idSchema.parse(id)
+    await query(`DELETE FROM accounts WHERE id = $1`, [parsedId])
+
     revalidatePath("/")
     return true
   } catch (error) {
