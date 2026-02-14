@@ -7,7 +7,14 @@
     "build": "next build",
     "dev": "next dev",
     "lint": "next lint",
-    "start": "next start"
+    "start": "next start",
+    "test": "npx vitest run --coverage",
+    "test:watch": "npx vitest",
+    "test:e2e": "npx playwright test",
+    "test:db:reset": "npx tsx db/test-db.ts reset",
+    "test:db:seed": "npx tsx db/test-db.ts seed",
+    "test:db:prepare": "npx tsx db/test-db.ts",
+    "test:ci": "npm run test && npm run test:e2e"
   },
   "dependencies": {
     "@hookform/resolvers": "latest",
@@ -68,13 +75,17 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "@types/node": "^22",
     "@types/react": "^18",
     "@types/react-dom": "^18",
+    "@vitest/coverage-v8": "^4.0.18",
     "eslint": "^9.34.0",
     "eslint-config-next": "^15.5.2",
     "postcss": "^8.5",
     "tailwindcss": "^3.4.17",
-    "typescript": "^5"
+    "tsx": "^4.21.0",
+    "typescript": "^5",
+    "vitest": "^4.0.18"
   }
 }
