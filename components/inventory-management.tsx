@@ -41,7 +41,7 @@ import {
   updateInventoryItem,
   deleteInventoryItem,
   createTransaction,
-} from "@/app/actions"
+} from "@/lib/facade/server"
 
 interface InventoryManagementProps {
   inventory?: InventoryItem[]

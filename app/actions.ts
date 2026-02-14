@@ -1,5 +1,8 @@
 "use server"
 
+import "server-only"
+
+
 import { revalidatePath } from "next/cache"
 import { query, toCamelCase, toSnakeCase } from "@/lib/db"
 import type { BusinessData, ScenarioData, InventoryItem, Customer, Payment, Transaction, Account } from "@/lib/types"
@@ -122,14 +125,9 @@ const accountUpdateSchema = accountCreateSchema.partial().strict()
 
 // Business Data Actions
 export async function getBusinessData(): Promise<BusinessData | null> {
+  await requireAuthenticatedUserId()
   try {
-    const result = await query(`SELECT * FROM business_data ORDER BY created_at DESC LIMIT 1`)
-
-    if (result.rows.length === 0) {
-      return null
-    }
-
-    return toCamelCase(result.rows[0])
+    return await repositories.businessData.getLatest()
   } catch (error) {
     console.error("Error fetching business data:", error)
     return null
@@ -151,7 +149,7 @@ export async function saveBusinessData(
     )
 
     revalidatePath("/")
-    return toCamelCase(result.rows[0])
+    return result
   } catch (error) {
     console.error("Error saving business data:", error)
     return null
@@ -186,7 +184,7 @@ export async function updateBusinessData(id: string, data: Partial<BusinessData>
     )
 
     revalidatePath("/")
-    return toCamelCase(result.rows[0])
+    return result
   } catch (error) {
     console.error("Error updating business data:", error)
     return null
@@ -195,19 +193,9 @@ export async function updateBusinessData(id: string, data: Partial<BusinessData>
 
 // Scenario Actions
 export async function getScenarios(): Promise<ScenarioData[]> {
+  await requireAuthenticatedUserId()
   try {
-    const scenariosResult = await query(`SELECT * FROM scenarios ORDER BY created_at DESC`)
-
-    const scenarios = toCamelCase(scenariosResult.rows)
-
-    // For each scenario, fetch its salespeople
-    for (const scenario of scenarios) {
-      const salespeopleResult = await query(`SELECT * FROM salespeople WHERE scenario_id = $1`, [scenario.id])
-
-      scenario.salespeople = toCamelCase(salespeopleResult.rows)
-    }
-
-    return scenarios
+    return await repositories.scenarios.list()
   } catch (error) {
     console.error("Error fetching scenarios:", error)
     return []
@@ -295,6 +283,7 @@ export async function createScenario(
     return null
   }
 }
+
 
 export async function updateScenario(id: string, data: Partial<ScenarioData>): Promise<ScenarioData | null> {
   try {
@@ -386,6 +375,7 @@ export async function updateScenario(id: string, data: Partial<ScenarioData>): P
   }
 }
 
+
 export async function deleteScenario(id: string): Promise<boolean> {
   try {
     const parsedId = idSchema.parse(id)
@@ -412,12 +402,12 @@ export async function deleteScenario(id: string): Promise<boolean> {
   }
 }
 
+
 // Inventory Actions
 export async function getInventory(): Promise<InventoryItem[]> {
+  await requireAuthenticatedUserId()
   try {
-    const result = await query(`SELECT * FROM inventory_items ORDER BY created_at DESC`)
-
-    return toCamelCase(result.rows)
+    return await repositories.inventory.list()
   } catch (error) {
     console.error("Error fetching inventory:", error)
     return []
@@ -449,7 +439,7 @@ export async function createInventoryItem(
     )
 
     revalidatePath("/")
-    return toCamelCase(result.rows[0])
+    return result
   } catch (error) {
     console.error("Error creating inventory item:", error)
     return null
@@ -508,14 +498,18 @@ export async function updateInventoryItem(id: string, data: Partial<InventoryIte
     )
 
     revalidatePath("/")
-    return toCamelCase(result.rows[0])
+    return result
   } catch (error) {
+    if (isPrismaNotFound(error)) {
+      return null
+    }
     console.error("Error updating inventory item:", error)
     return null
   }
 }
 
 export async function deleteInventoryItem(id: string): Promise<boolean> {
+  await requireAuthenticatedUserId()
   try {
     const parsedId = idSchema.parse(id)
     await query(`DELETE FROM inventory_items WHERE id = $1`, [parsedId])
@@ -523,6 +517,9 @@ export async function deleteInventoryItem(id: string): Promise<boolean> {
     revalidatePath("/")
     return true
   } catch (error) {
+    if (isPrismaNotFound(error)) {
+      return false
+    }
     console.error("Error deleting inventory item:", error)
     return false
   }
@@ -530,21 +527,9 @@ export async function deleteInventoryItem(id: string): Promise<boolean> {
 
 // Customer Actions
 export async function getCustomers(): Promise<Customer[]> {
+  await requireAuthenticatedUserId()
   try {
-    const customersResult = await query(`SELECT * FROM customers ORDER BY created_at DESC`)
-
-    const customers = toCamelCase(customersResult.rows)
-
-    // For each customer, fetch their payments
-    for (const customer of customers) {
-      const paymentsResult = await query(`SELECT * FROM payments WHERE customer_id = $1 ORDER BY date DESC`, [
-        customer.id,
-      ])
-
-      customer.payments = toCamelCase(paymentsResult.rows)
-    }
-
-    return customers
+    return await repositories.customers.list()
   } catch (error) {
     console.error("Error fetching customers:", error)
     return []
@@ -601,7 +586,7 @@ export async function createCustomer(
     customer.payments = []
 
     revalidatePath("/")
-    return customer
+    return result
   } catch (error) {
     console.error("Error creating customer:", error)
     return null
@@ -661,6 +646,9 @@ export async function updateCustomer(id: string, data: Partial<Customer>): Promi
     revalidatePath("/")
     return result
   } catch (error) {
+    if (isPrismaNotFound(error)) {
+      return null
+    }
     console.error("Error updating customer:", error)
     return null
   }
@@ -690,6 +678,7 @@ export async function deleteCustomer(id: string): Promise<boolean> {
     return false
   }
 }
+
 
 // Payment Actions
 export async function addPayment(
@@ -743,7 +732,7 @@ export async function addPayment(
     await query("COMMIT")
 
     revalidatePath("/")
-    return toCamelCase(paymentResult.rows[0])
+    return result
   } catch (error) {
     // Rollback transaction on error
     await query("ROLLBACK")
@@ -752,12 +741,12 @@ export async function addPayment(
   }
 }
 
+
 // Transaction Actions
 export async function getTransactions(): Promise<Transaction[]> {
+  await requireAuthenticatedUserId()
   try {
-    const result = await query(`SELECT * FROM transactions ORDER BY created_at DESC`)
-
-    return toCamelCase(result.rows)
+    return await repositories.transactions.list()
   } catch (error) {
     console.error("Error fetching transactions:", error)
     return []
@@ -839,7 +828,7 @@ export async function createTransaction(data: Omit<Transaction, "id" | "createdA
     await query("COMMIT")
 
     revalidatePath("/")
-    return toCamelCase(transactionResult.rows[0])
+    return result
   } catch (error) {
     // Rollback transaction on error
     await query("ROLLBACK")
@@ -848,12 +837,12 @@ export async function createTransaction(data: Omit<Transaction, "id" | "createdA
   }
 }
 
+
 // Account Actions
 export async function getAccounts(): Promise<Account[]> {
+  await requireAuthenticatedUserId()
   try {
-    const result = await query(`SELECT * FROM accounts ORDER BY created_at DESC`)
-
-    return toCamelCase(result.rows)
+    return await repositories.accounts.list()
   } catch (error) {
     console.error("Error fetching accounts:", error)
     return []
@@ -873,7 +862,7 @@ export async function createAccount(data: Omit<Account, "id" | "createdAt" | "up
     )
 
     revalidatePath("/")
-    return toCamelCase(result.rows[0])
+    return result
   } catch (error) {
     console.error("Error creating account:", error)
     return null
@@ -903,14 +892,18 @@ export async function updateAccount(id: string, data: Partial<Account>): Promise
     )
 
     revalidatePath("/")
-    return toCamelCase(result.rows[0])
+    return result
   } catch (error) {
+    if (isPrismaNotFound(error)) {
+      return null
+    }
     console.error("Error updating account:", error)
     return null
   }
 }
 
 export async function deleteAccount(id: string): Promise<boolean> {
+  await requireAuthenticatedUserId()
   try {
     const parsedId = idSchema.parse(id)
     await query(`DELETE FROM accounts WHERE id = $1`, [parsedId])
@@ -918,29 +911,26 @@ export async function deleteAccount(id: string): Promise<boolean> {
     revalidatePath("/")
     return true
   } catch (error) {
+    if (isPrismaNotFound(error)) {
+      return false
+    }
     console.error("Error deleting account:", error)
     return false
   }
 }
 
-// Initialize default business data if none exists
 export async function initializeDefaultBusinessData(): Promise<BusinessData | null> {
+  await requireAuthenticatedUserId()
   try {
-    const existingDataResult = await query(`SELECT * FROM business_data LIMIT 1`)
-
-    if (existingDataResult.rows.length === 0) {
-      const result = await query(
-        `INSERT INTO business_data 
-         (wholesale_price_per_oz, target_profit_per_month, operating_expenses) 
-         VALUES ($1, $2, $3) 
-         RETURNING *`,
-        [100, 2000, 500],
-      )
-
-      return toCamelCase(result.rows[0])
+    const existing = await repositories.businessData.getLatest()
+    if (existing) {
+      return existing
     }
-
-    return toCamelCase(existingDataResult.rows[0])
+    return await repositories.businessData.create({
+      wholesalePricePerOz: 100,
+      targetProfitPerMonth: 2000,
+      operatingExpenses: 500,
+    })
   } catch (error) {
     console.error("Error initializing default business data:", error)
     return null
