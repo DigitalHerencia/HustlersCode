@@ -1,19 +1,24 @@
-import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server"
+import { NextRequest, NextResponse } from "next/server"
+import { deriveTenantLookupDomain, normalizeRequestHost } from "@/lib/tenant/host"
 
-const isProtectedRoute = createRouteMatcher([
-  "/((?!sign-in(?:/.*)?$|sign-up(?:/.*)?$|api/webhooks/clerk$).*)",
-])
+export function middleware(request: NextRequest) {
+  const host = normalizeRequestHost(request.headers.get("x-forwarded-host") ?? request.headers.get("host"))
 
-export default clerkMiddleware((auth, req) => {
-  if (isProtectedRoute(req)) {
-    const { userId, redirectToSignIn } = auth()
-
-    if (!userId) {
-      return redirectToSignIn()
-    }
+  if (!host) {
+    return NextResponse.next()
   }
-})
+
+  const domain = deriveTenantLookupDomain(host)
+  const requestHeaders = new Headers(request.headers)
+  requestHeaders.set("x-tenant-host", domain)
+
+  return NextResponse.next({
+    request: {
+      headers: requestHeaders,
+    },
+  })
+}
 
 export const config = {
-  matcher: ["/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)", "/(api|trpc)(.*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 }
