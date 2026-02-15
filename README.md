@@ -102,6 +102,39 @@ npm run dev
 
 ---
 
+
+## 🧪 Testing Strategy
+
+### Vitest (domain/use-case + server helpers)
+
+```bash
+npm run test
+```
+
+- Unit and server helper tests live in `tests/unit` and `tests/server`.
+- Coverage reports are generated with enforced thresholds (lines/functions/statements >= 70%, branches >= 60%).
+- CI retries failing Vitest tests to reduce flaky failures.
+
+### Playwright (end-to-end)
+
+```bash
+npm run test:e2e
+```
+
+- E2E specs live in `tests/e2e`.
+- Coverage for auth entry points, tenant/routing boundaries, RBAC route boundaries, and core CRUD route readiness.
+- CI runs with retries, trace-on-retry, screenshots/videos on failure, and `forbidOnly` protection.
+
+### Isolated test database workflow
+
+```bash
+npm run test:db:prepare
+```
+
+- `db/test/reset.sql` truncates all business tables.
+- `db/test/seed.sql` inserts deterministic fixture records.
+- Set `TEST_DATABASE_URL` to isolate test runs from non-test environments.
+
 ## 📈 The Code
 
 ### Database Schema
