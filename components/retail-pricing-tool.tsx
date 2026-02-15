@@ -17,7 +17,7 @@ import { calculatePricePoints, formatCurrency } from "@/lib/utils"
 import { defaultMarkupPercentages, type PricePoint, type BusinessData } from "@/lib/data"
 import { HustleTip } from "@/components/hustle-tip"
 import { DollarSign, TrendingUp, Percent, Database, Calculator, BarChart4, Table, Settings, Save } from "lucide-react"
-import { updateBusinessData, saveBusinessData } from "@/app/actions"
+import { updateBusinessData, saveBusinessData } from "@/lib/facade/server"
 
 const formSchema = z.object({
   wholesalePrice: z.coerce.number().positive("Wholesale price must be positive"),

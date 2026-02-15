@@ -1,0 +1,137 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model BusinessData {
+  id                   String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  wholesalePricePerOz  Decimal  @default(100) @map("wholesale_price_per_oz") @db.Decimal(10, 2)
+  targetProfitPerMonth Decimal  @default(2000) @map("target_profit_per_month") @db.Decimal(10, 2)
+  operatingExpenses    Decimal  @default(500) @map("operating_expenses") @db.Decimal(10, 2)
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("business_data")
+}
+
+model Scenario {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name           String       @db.VarChar(255)
+  description    String?
+  wholesalePrice Decimal      @map("wholesale_price") @db.Decimal(10, 2)
+  retailPrice    Decimal      @map("retail_price") @db.Decimal(10, 2)
+  quantity       Decimal      @db.Decimal(10, 2)
+  timePeriod     String       @map("time_period") @db.VarChar(50)
+  expenses       Decimal      @default(0) @db.Decimal(10, 2)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  salespeople    Salesperson[]
+
+  @@map("scenarios")
+}
+
+model Salesperson {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  scenarioId     String   @map("scenario_id") @db.Uuid
+  name           String   @db.VarChar(255)
+  commissionRate Decimal  @default(0) @map("commission_rate") @db.Decimal(5, 2)
+  salesQuantity  Decimal  @default(0) @map("sales_quantity") @db.Decimal(10, 2)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  scenario       Scenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+
+  @@index([scenarioId], map: "idx_salespeople_scenario_id")
+  @@map("salespeople")
+}
+
+model InventoryItem {
+  id                String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name              String        @db.VarChar(255)
+  description       String?
+  quantityG         Decimal       @default(0) @map("quantity_g") @db.Decimal(10, 2)
+  quantityOz        Decimal       @default(0) @map("quantity_oz") @db.Decimal(10, 2)
+  quantityKg        Decimal       @default(0) @map("quantity_kg") @db.Decimal(10, 2)
+  purchaseDate      DateTime      @map("purchase_date") @db.Date
+  costPerOz         Decimal       @default(0) @map("cost_per_oz") @db.Decimal(10, 2)
+  totalCost         Decimal       @default(0) @map("total_cost") @db.Decimal(10, 2)
+  reorderThresholdG Decimal       @default(100) @map("reorder_threshold_g") @db.Decimal(10, 2)
+  createdAt         DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+  transactions      Transaction[]
+
+  @@index([name], map: "idx_inventory_items_name")
+  @@map("inventory_items")
+}
+
+model Customer {
+  id           String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name         String        @db.VarChar(255)
+  phone        String?       @db.VarChar(50)
+  email        String?       @db.VarChar(255)
+  address      String?
+  amountOwed   Decimal       @default(0) @map("amount_owed") @db.Decimal(10, 2)
+  dueDate      DateTime?     @map("due_date") @db.Date
+  status       String        @default("unpaid") @db.VarChar(50)
+  notes        String?
+  createdAt    DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+  payments     Payment[]
+  transactions Transaction[]
+
+  @@index([name], map: "idx_customers_name")
+  @@index([status], map: "idx_customers_status")
+  @@map("customers")
+}
+
+model Payment {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  customerId String   @map("customer_id") @db.Uuid
+  amount     Decimal  @db.Decimal(10, 2)
+  date       DateTime @db.Date
+  method     String   @default("cash") @db.VarChar(50)
+  notes      String?
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId], map: "idx_payments_customer_id")
+  @@map("payments")
+}
+
+model Transaction {
+  id           String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  date         DateTime       @db.Timestamptz(6)
+  type         String         @db.VarChar(50)
+  inventoryId  String?        @map("inventory_id") @db.Uuid
+  inventoryName String?       @map("inventory_name") @db.VarChar(255)
+  quantityGrams Decimal       @default(0) @map("quantity_grams") @db.Decimal(10, 2)
+  pricePerGram Decimal        @default(0) @map("price_per_gram") @db.Decimal(10, 2)
+  totalPrice   Decimal        @default(0) @map("total_price") @db.Decimal(10, 2)
+  cost         Decimal        @default(0) @db.Decimal(10, 2)
+  profit       Decimal        @default(0) @db.Decimal(10, 2)
+  paymentMethod String        @default("cash") @map("payment_method") @db.VarChar(50)
+  customerId   String?        @map("customer_id") @db.Uuid
+  customerName String?        @map("customer_name") @db.VarChar(255)
+  notes        String?
+  createdAt    DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  inventory    InventoryItem? @relation(fields: [inventoryId], references: [id], onDelete: SetNull)
+  customer     Customer?      @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  @@index([date], map: "idx_transactions_date")
+  @@index([type], map: "idx_transactions_type")
+  @@map("transactions")
+}
+
+model Account {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String   @db.VarChar(255)
+  type        String   @default("asset") @db.VarChar(50)
+  balance     Decimal  @default(0) @db.Decimal(10, 2)
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("accounts")
+}

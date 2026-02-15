@@ -1,20 +1,18 @@
 "use server"
 
+import "server-only"
+
+
 import { revalidatePath } from "next/cache"
 import { query, toCamelCase, toSnakeCase } from "@/lib/db"
 import { requireAuthorization } from "@/lib/authz/guard"
 import type { BusinessData, ScenarioData, InventoryItem, Customer, Payment, Transaction, Account } from "@/lib/types"
 
-async function getTenantIdFor(action: Parameters<typeof requireAuthorization>[0]): Promise<string> {
-  const principal = await requireAuthorization(action)
-  return principal.tenantId
-}
-
 // Business Data Actions
 export async function getBusinessData(): Promise<BusinessData | null> {
+  await requireAuthenticatedUserId()
   try {
-    const tenantId = await getTenantIdFor("sensitive:read")
-    const result = await query(`SELECT * FROM business_data WHERE tenant_id = $1 ORDER BY created_at DESC LIMIT 1`, [tenantId])
+    const result = await query(`SELECT * FROM business_data ORDER BY created_at DESC LIMIT 1`)
 
     if (result.rows.length === 0) {
       return null
@@ -31,7 +29,6 @@ export async function saveBusinessData(
   data: Omit<BusinessData, "id" | "createdAt" | "updatedAt">,
 ): Promise<BusinessData | null> {
   try {
-    const tenantId = await getTenantIdFor("business_data:write")
     const snakeCaseData = toSnakeCase(data)
     const result = await query(
       `INSERT INTO business_data 
@@ -42,7 +39,7 @@ export async function saveBusinessData(
     )
 
     revalidatePath("/")
-    return toCamelCase(result.rows[0])
+    return result
   } catch (error) {
     console.error("Error saving business data:", error)
     return null
@@ -51,7 +48,7 @@ export async function saveBusinessData(
 
 export async function updateBusinessData(id: string, data: Partial<BusinessData>): Promise<BusinessData | null> {
   try {
-    const tenantId = await getTenantIdFor("business_data:write")
+    // Build dynamic query based on provided fields
     const updates: string[] = []
     const values: any[] = []
     let paramIndex = 1
@@ -76,19 +73,30 @@ export async function updateBusinessData(id: string, data: Partial<BusinessData>
       paramIndex++
     }
 
+    // Add updated_at timestamp
     updates.push(`updated_at = NOW()`)
-    values.push(id, tenantId)
+
+    // Add id as the last parameter
+    values.push(id)
 
     const result = await query(
       `UPDATE business_data 
        SET ${updates.join(", ")} 
-       WHERE id = $${paramIndex} AND tenant_id = $${paramIndex + 1}
+       WHERE id = $${paramIndex} 
        RETURNING *`,
-      values,
+      [
+        hasWholesalePricePerOz,
+        parsedData.wholesalePricePerOz,
+        hasTargetProfitPerMonth,
+        parsedData.targetProfitPerMonth,
+        hasOperatingExpenses,
+        parsedData.operatingExpenses,
+        parsedId,
+      ],
     )
 
     revalidatePath("/")
-    return toCamelCase(result.rows[0])
+    return result
   } catch (error) {
     console.error("Error updating business data:", error)
     return null
@@ -97,12 +105,14 @@ export async function updateBusinessData(id: string, data: Partial<BusinessData>
 
 export async function getScenarios(): Promise<ScenarioData[]> {
   try {
-    const tenantId = await getTenantIdFor("sensitive:read")
-    const scenariosResult = await query(`SELECT * FROM scenarios WHERE tenant_id = $1 ORDER BY created_at DESC`, [tenantId])
+    const scenariosResult = await query(`SELECT * FROM scenarios ORDER BY created_at DESC`)
+
     const scenarios = toCamelCase(scenariosResult.rows)
 
+    // For each scenario, fetch its salespeople
     for (const scenario of scenarios) {
-      const salespeopleResult = await query(`SELECT * FROM salespeople WHERE scenario_id = $1 AND tenant_id = $2`, [scenario.id, tenantId])
+      const salespeopleResult = await query(`SELECT * FROM salespeople WHERE scenario_id = $1`, [scenario.id])
+
       scenario.salespeople = toCamelCase(salespeopleResult.rows)
     }
 
@@ -115,15 +125,17 @@ export async function getScenarios(): Promise<ScenarioData[]> {
 
 export async function getScenario(id: string): Promise<ScenarioData | null> {
   try {
-    const tenantId = await getTenantIdFor("sensitive:read")
-    const scenarioResult = await query(`SELECT * FROM scenarios WHERE id = $1 AND tenant_id = $2`, [id, tenantId])
+    const scenarioResult = await query(`SELECT * FROM scenarios WHERE id = $1`, [id])
 
     if (scenarioResult.rows.length === 0) {
       return null
     }
 
     const scenario = toCamelCase(scenarioResult.rows[0])
-    const salespeopleResult = await query(`SELECT * FROM salespeople WHERE scenario_id = $1 AND tenant_id = $2`, [id, tenantId])
+
+    // Fetch salespeople for this scenario
+    const salespeopleResult = await query(`SELECT * FROM salespeople WHERE scenario_id = $1`, [id])
+
     scenario.salespeople = toCamelCase(salespeopleResult.rows)
 
     return scenario
@@ -135,7 +147,6 @@ export async function getScenario(id: string): Promise<ScenarioData | null> {
 
 export async function createScenario(data: Omit<ScenarioData, "id" | "createdAt" | "updatedAt">): Promise<ScenarioData | null> {
   try {
-    const tenantId = await getTenantIdFor("scenario:create")
     const { salespeople, ...scenarioData } = data
     const snakeCaseData = toSnakeCase(scenarioData)
 
@@ -172,14 +183,15 @@ export async function createScenario(data: Omit<ScenarioData, "id" | "createdAt"
   }
 }
 
+
 export async function updateScenario(id: string, data: Partial<ScenarioData>): Promise<ScenarioData | null> {
   try {
-    const tenantId = await getTenantIdFor("scenario:update")
     const { salespeople, ...scenarioData } = data
     const snakeCaseData = toSnakeCase(scenarioData)
 
     await query("BEGIN")
 
+    // Build dynamic query for scenario update
     if (Object.keys(snakeCaseData).length > 0) {
       const updates: string[] = []
       const values: any[] = []
@@ -191,27 +203,40 @@ export async function updateScenario(id: string, data: Partial<ScenarioData>): P
         paramIndex++
       }
 
+      // Add updated_at timestamp
       updates.push(`updated_at = NOW()`)
-      values.push(id, tenantId)
 
-      await query(`UPDATE scenarios SET ${updates.join(", ")} WHERE id = $${paramIndex} AND tenant_id = $${paramIndex + 1}`, values)
+      // Add id as the last parameter
+      values.push(id)
+
+      await query(
+        `UPDATE scenarios 
+         SET ${updates.join(", ")} 
+         WHERE id = $${paramIndex}`,
+        values,
+      )
     }
 
     if (salespeople) {
-      await query(`DELETE FROM salespeople WHERE scenario_id = $1 AND tenant_id = $2`, [id, tenantId])
+      // Delete existing salespeople
+      await query(`DELETE FROM salespeople WHERE scenario_id = $1`, [id])
 
       for (const person of salespeople) {
         const snakeCasePerson = toSnakeCase(person)
         await query(
-          `INSERT INTO salespeople (scenario_id, tenant_id, name, commission_rate, sales_quantity)
-           VALUES ($1, $2, $3, $4, $5)`,
-          [id, tenantId, snakeCasePerson.name, snakeCasePerson.commission_rate, snakeCasePerson.sales_quantity],
+          `INSERT INTO salespeople
+           (scenario_id, name, commission_rate, sales_quantity)
+           VALUES ($1, $2, $3, $4)`,
+          [id, snakeCasePerson.name, snakeCasePerson.commission_rate, snakeCasePerson.sales_quantity],
         )
       }
     }
 
     await query("COMMIT")
+
+    // Fetch the updated scenario with salespeople
     const result = await getScenario(id)
+
     revalidatePath("/")
     return result
   } catch (error) {
@@ -221,12 +246,19 @@ export async function updateScenario(id: string, data: Partial<ScenarioData>): P
   }
 }
 
+
 export async function deleteScenario(id: string): Promise<boolean> {
   try {
-    const tenantId = await getTenantIdFor("scenario:delete")
+    // Begin transaction
     await query("BEGIN")
-    await query(`DELETE FROM salespeople WHERE scenario_id = $1 AND tenant_id = $2`, [id, tenantId])
-    await query(`DELETE FROM scenarios WHERE id = $1 AND tenant_id = $2`, [id, tenantId])
+
+    // Delete salespeople first (foreign key constraint)
+    await query(`DELETE FROM salespeople WHERE scenario_id = $1`, [id])
+
+    // Delete scenario
+    await query(`DELETE FROM scenarios WHERE id = $1`, [id])
+
+    // Commit transaction
     await query("COMMIT")
 
     revalidatePath("/")
@@ -238,10 +270,12 @@ export async function deleteScenario(id: string): Promise<boolean> {
   }
 }
 
+
 export async function getInventory(): Promise<InventoryItem[]> {
+  await requireAuthenticatedUserId()
   try {
-    const tenantId = await getTenantIdFor("sensitive:read")
-    const result = await query(`SELECT * FROM inventory_items WHERE tenant_id = $1 ORDER BY created_at DESC`, [tenantId])
+    const result = await query(`SELECT * FROM inventory_items ORDER BY created_at DESC`)
+
     return toCamelCase(result.rows)
   } catch (error) {
     console.error("Error fetching inventory:", error)
@@ -253,7 +287,6 @@ export async function createInventoryItem(
   data: Omit<InventoryItem, "id" | "createdAt" | "updatedAt">,
 ): Promise<InventoryItem | null> {
   try {
-    const tenantId = await getTenantIdFor("inventory:create")
     const snakeCaseData = toSnakeCase(data)
     const result = await query(
       `INSERT INTO inventory_items 
@@ -264,7 +297,7 @@ export async function createInventoryItem(
     )
 
     revalidatePath("/")
-    return toCamelCase(result.rows[0])
+    return result
   } catch (error) {
     console.error("Error creating inventory item:", error)
     return null
@@ -273,8 +306,9 @@ export async function createInventoryItem(
 
 export async function updateInventoryItem(id: string, data: Partial<InventoryItem>): Promise<InventoryItem | null> {
   try {
-    const tenantId = await getTenantIdFor("inventory:update")
     const snakeCaseData = toSnakeCase(data)
+
+    // Build dynamic query based on provided fields
     const updates: string[] = []
     const values: any[] = []
     let paramIndex = 1
@@ -287,30 +321,42 @@ export async function updateInventoryItem(id: string, data: Partial<InventoryIte
       }
     }
 
+    // Add updated_at timestamp
     updates.push(`updated_at = NOW()`)
-    values.push(id, tenantId)
+
+    // Add id as the last parameter
+    values.push(id)
 
     const result = await query(
-      `UPDATE inventory_items SET ${updates.join(", ")} WHERE id = $${paramIndex} AND tenant_id = $${paramIndex + 1} RETURNING *`,
+      `UPDATE inventory_items 
+       SET ${updates.join(", ")} 
+       WHERE id = $${paramIndex} 
+       RETURNING *`,
       values,
     )
 
     revalidatePath("/")
-    return toCamelCase(result.rows[0])
+    return result
   } catch (error) {
+    if (isPrismaNotFound(error)) {
+      return null
+    }
     console.error("Error updating inventory item:", error)
     return null
   }
 }
 
 export async function deleteInventoryItem(id: string): Promise<boolean> {
+  await requireAuthenticatedUserId()
   try {
-    const tenantId = await getTenantIdFor("inventory:delete")
-    await query(`DELETE FROM inventory_items WHERE id = $1 AND tenant_id = $2`, [id, tenantId])
+    await query(`DELETE FROM inventory_items WHERE id = $1`, [id])
 
     revalidatePath("/")
     return true
   } catch (error) {
+    if (isPrismaNotFound(error)) {
+      return false
+    }
     console.error("Error deleting inventory item:", error)
     return false
   }
@@ -318,12 +364,16 @@ export async function deleteInventoryItem(id: string): Promise<boolean> {
 
 export async function getCustomers(): Promise<Customer[]> {
   try {
-    const tenantId = await getTenantIdFor("sensitive:read")
-    const customersResult = await query(`SELECT * FROM customers WHERE tenant_id = $1 ORDER BY created_at DESC`, [tenantId])
+    const customersResult = await query(`SELECT * FROM customers ORDER BY created_at DESC`)
+
     const customers = toCamelCase(customersResult.rows)
 
+    // For each customer, fetch their payments
     for (const customer of customers) {
-      const paymentsResult = await query(`SELECT * FROM payments WHERE customer_id = $1 AND tenant_id = $2 ORDER BY date DESC`, [customer.id, tenantId])
+      const paymentsResult = await query(`SELECT * FROM payments WHERE customer_id = $1 ORDER BY date DESC`, [
+        customer.id,
+      ])
+
       customer.payments = toCamelCase(paymentsResult.rows)
     }
 
@@ -336,15 +386,17 @@ export async function getCustomers(): Promise<Customer[]> {
 
 export async function getCustomer(id: string): Promise<Customer | null> {
   try {
-    const tenantId = await getTenantIdFor("sensitive:read")
-    const customerResult = await query(`SELECT * FROM customers WHERE id = $1 AND tenant_id = $2`, [id, tenantId])
+    const customerResult = await query(`SELECT * FROM customers WHERE id = $1`, [id])
 
     if (customerResult.rows.length === 0) {
       return null
     }
 
     const customer = toCamelCase(customerResult.rows[0])
-    const paymentsResult = await query(`SELECT * FROM payments WHERE customer_id = $1 AND tenant_id = $2 ORDER BY date DESC`, [id, tenantId])
+
+    // Fetch payments for this customer
+    const paymentsResult = await query(`SELECT * FROM payments WHERE customer_id = $1 ORDER BY date DESC`, [id])
+
     customer.payments = toCamelCase(paymentsResult.rows)
 
     return customer
@@ -358,7 +410,6 @@ export async function createCustomer(
   data: Omit<Customer, "id" | "createdAt" | "updatedAt" | "payments">,
 ): Promise<Customer | null> {
   try {
-    const tenantId = await getTenantIdFor("customer:create")
     const snakeCaseData = toSnakeCase(data)
     const result = await query(
       `INSERT INTO customers 
@@ -372,7 +423,7 @@ export async function createCustomer(
     customer.payments = []
 
     revalidatePath("/")
-    return customer
+    return result
   } catch (error) {
     console.error("Error creating customer:", error)
     return null
@@ -381,10 +432,10 @@ export async function createCustomer(
 
 export async function updateCustomer(id: string, data: Partial<Customer>): Promise<Customer | null> {
   try {
-    const tenantId = await getTenantIdFor("customer:update")
     const { payments, ...customerData } = data
     const snakeCaseData = toSnakeCase(customerData)
 
+    // Build dynamic query based on provided fields
     const updates: string[] = []
     const values: any[] = []
     let paramIndex = 1
@@ -397,16 +448,28 @@ export async function updateCustomer(id: string, data: Partial<Customer>): Promi
       }
     }
 
+    // Add updated_at timestamp
     updates.push(`updated_at = NOW()`)
-    values.push(id, tenantId)
 
-    await query(`UPDATE customers SET ${updates.join(", ")} WHERE id = $${paramIndex} AND tenant_id = $${paramIndex + 1}`, values)
+    // Add id as the last parameter
+    values.push(id)
 
+    await query(
+      `UPDATE customers 
+       SET ${updates.join(", ")} 
+       WHERE id = $${paramIndex}`,
+      values,
+    )
+
+    // Fetch the updated customer with payments
     const result = await getCustomer(id)
 
     revalidatePath("/")
     return result
   } catch (error) {
+    if (isPrismaNotFound(error)) {
+      return null
+    }
     console.error("Error updating customer:", error)
     return null
   }
@@ -416,8 +479,14 @@ export async function deleteCustomer(id: string): Promise<boolean> {
   try {
     const tenantId = await getTenantIdFor("customer:delete")
     await query("BEGIN")
-    await query(`DELETE FROM payments WHERE customer_id = $1 AND tenant_id = $2`, [id, tenantId])
-    await query(`DELETE FROM customers WHERE id = $1 AND tenant_id = $2`, [id, tenantId])
+
+    // Delete payments first (foreign key constraint)
+    await query(`DELETE FROM payments WHERE customer_id = $1`, [id])
+
+    // Delete customer
+    await query(`DELETE FROM customers WHERE id = $1`, [id])
+
+    // Commit transaction
     await query("COMMIT")
 
     revalidatePath("/")
@@ -429,12 +498,12 @@ export async function deleteCustomer(id: string): Promise<boolean> {
   }
 }
 
+
 export async function addPayment(
   customerId: string,
   data: Omit<Payment, "id" | "createdAt" | "customerId">,
 ): Promise<Payment | null> {
   try {
-    const tenantId = await getTenantIdFor("payment:create")
     const snakeCaseData = toSnakeCase(data)
 
     await query("BEGIN")
@@ -444,10 +513,11 @@ export async function addPayment(
        (customer_id, tenant_id, amount, date, method, notes)
        VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
-      [customerId, tenantId, snakeCaseData.amount, snakeCaseData.date, snakeCaseData.method, snakeCaseData.notes],
+      [customerId, snakeCaseData.amount, snakeCaseData.date, snakeCaseData.method, snakeCaseData.notes],
     )
 
-    const customerResult = await query(`SELECT * FROM customers WHERE id = $1 AND tenant_id = $2`, [customerId, tenantId])
+    // Get the customer
+    const customerResult = await query(`SELECT * FROM customers WHERE id = $1`, [customerId])
 
     if (customerResult.rows.length > 0) {
       const customer = customerResult.rows[0]
@@ -460,13 +530,19 @@ export async function addPayment(
         newStatus = "partial"
       }
 
-      await query(`UPDATE customers SET amount_owed = $1, status = $2, updated_at = NOW() WHERE id = $3 AND tenant_id = $4`, [newAmountOwed, newStatus, customerId, tenantId])
+      // Update customer
+      await query(
+        `UPDATE customers 
+         SET amount_owed = $1, status = $2, updated_at = NOW() 
+         WHERE id = $3`,
+        [newAmountOwed, newStatus, customerId],
+      )
     }
 
     await query("COMMIT")
 
     revalidatePath("/")
-    return toCamelCase(paymentResult.rows[0])
+    return result
   } catch (error) {
     await query("ROLLBACK")
     console.error("Error adding payment:", error)
@@ -474,10 +550,12 @@ export async function addPayment(
   }
 }
 
+
 export async function getTransactions(): Promise<Transaction[]> {
+  await requireAuthenticatedUserId()
   try {
-    const tenantId = await getTenantIdFor("sensitive:read")
-    const result = await query(`SELECT * FROM transactions WHERE tenant_id = $1 ORDER BY created_at DESC`, [tenantId])
+    const result = await query(`SELECT * FROM transactions ORDER BY created_at DESC`)
+
     return toCamelCase(result.rows)
   } catch (error) {
     console.error("Error fetching transactions:", error)
@@ -487,7 +565,6 @@ export async function getTransactions(): Promise<Transaction[]> {
 
 export async function createTransaction(data: Omit<Transaction, "id" | "createdAt">): Promise<Transaction | null> {
   try {
-    const tenantId = await getTenantIdFor("transaction:create")
     const snakeCaseData = toSnakeCase(data)
 
     await query("BEGIN")
@@ -530,7 +607,7 @@ export async function createTransaction(data: Omit<Transaction, "id" | "createdA
     await query("COMMIT")
 
     revalidatePath("/")
-    return toCamelCase(transactionResult.rows[0])
+    return result
   } catch (error) {
     await query("ROLLBACK")
     console.error("Error creating transaction:", error)
@@ -538,10 +615,12 @@ export async function createTransaction(data: Omit<Transaction, "id" | "createdA
   }
 }
 
+
 export async function getAccounts(): Promise<Account[]> {
+  await requireAuthenticatedUserId()
   try {
-    const tenantId = await getTenantIdFor("sensitive:read")
-    const result = await query(`SELECT * FROM accounts WHERE tenant_id = $1 ORDER BY created_at DESC`, [tenantId])
+    const result = await query(`SELECT * FROM accounts ORDER BY created_at DESC`)
+
     return toCamelCase(result.rows)
   } catch (error) {
     console.error("Error fetching accounts:", error)
@@ -551,7 +630,6 @@ export async function getAccounts(): Promise<Account[]> {
 
 export async function createAccount(data: Omit<Account, "id" | "createdAt" | "updatedAt">): Promise<Account | null> {
   try {
-    const tenantId = await getTenantIdFor("account:create")
     const snakeCaseData = toSnakeCase(data)
     const result = await query(
       `INSERT INTO accounts 
@@ -562,7 +640,7 @@ export async function createAccount(data: Omit<Account, "id" | "createdAt" | "up
     )
 
     revalidatePath("/")
-    return toCamelCase(result.rows[0])
+    return result
   } catch (error) {
     console.error("Error creating account:", error)
     return null
@@ -571,8 +649,9 @@ export async function createAccount(data: Omit<Account, "id" | "createdAt" | "up
 
 export async function updateAccount(id: string, data: Partial<Account>): Promise<Account | null> {
   try {
-    const tenantId = await getTenantIdFor("account:update")
     const snakeCaseData = toSnakeCase(data)
+
+    // Build dynamic query based on provided fields
     const updates: string[] = []
     const values: any[] = []
     let paramIndex = 1
@@ -585,76 +664,60 @@ export async function updateAccount(id: string, data: Partial<Account>): Promise
       }
     }
 
+    // Add updated_at timestamp
     updates.push(`updated_at = NOW()`)
-    values.push(id, tenantId)
+
+    // Add id as the last parameter
+    values.push(id)
 
     const result = await query(
       `UPDATE accounts 
        SET ${updates.join(", ")} 
-       WHERE id = $${paramIndex} AND tenant_id = $${paramIndex + 1}
+       WHERE id = $${paramIndex} 
        RETURNING *`,
-      values,
+      [hasName, parsedData.name, hasType, parsedData.type, hasBalance, parsedData.balance, hasDescription, parsedData.description, parsedId],
     )
 
     revalidatePath("/")
-    return toCamelCase(result.rows[0])
+    return result
   } catch (error) {
+    if (isPrismaNotFound(error)) {
+      return null
+    }
     console.error("Error updating account:", error)
     return null
   }
 }
 
 export async function deleteAccount(id: string): Promise<boolean> {
+  await requireAuthenticatedUserId()
   try {
-    const tenantId = await getTenantIdFor("account:delete")
-    await query(`DELETE FROM accounts WHERE id = $1 AND tenant_id = $2`, [id, tenantId])
+    await query(`DELETE FROM accounts WHERE id = $1`, [id])
 
     revalidatePath("/")
     return true
   } catch (error) {
+    if (isPrismaNotFound(error)) {
+      return false
+    }
     console.error("Error deleting account:", error)
     return false
   }
 }
 
-export async function exportReportingSnapshot(): Promise<string> {
-  const tenantId = await getTenantIdFor("reporting:export")
-
-  const [businessData, inventory, customers, transactions, accounts] = await Promise.all([
-    query(`SELECT * FROM business_data WHERE tenant_id = $1 ORDER BY created_at DESC LIMIT 1`, [tenantId]),
-    query(`SELECT * FROM inventory_items WHERE tenant_id = $1 ORDER BY created_at DESC`, [tenantId]),
-    query(`SELECT * FROM customers WHERE tenant_id = $1 ORDER BY created_at DESC`, [tenantId]),
-    query(`SELECT * FROM transactions WHERE tenant_id = $1 ORDER BY created_at DESC`, [tenantId]),
-    query(`SELECT * FROM accounts WHERE tenant_id = $1 ORDER BY created_at DESC`, [tenantId]),
-  ])
-
-  return JSON.stringify(
-    {
-      tenantId,
-      generatedAt: new Date().toISOString(),
-      businessData: toCamelCase(businessData.rows[0] ?? null),
-      inventory: toCamelCase(inventory.rows),
-      customers: toCamelCase(customers.rows),
-      transactions: toCamelCase(transactions.rows),
-      accounts: toCamelCase(accounts.rows),
-    },
-    null,
-    2,
-  )
-}
-
+// Initialize default business data if none exists
 export async function initializeDefaultBusinessData(): Promise<BusinessData | null> {
+  await requireAuthenticatedUserId()
   try {
-    const tenantId = await getTenantIdFor("business_data:write")
-    const existingDataResult = await query(`SELECT * FROM business_data WHERE tenant_id = $1 LIMIT 1`, [tenantId])
+    const existingDataResult = await query(`SELECT * FROM business_data LIMIT 1`)
 
     if (existingDataResult.rows.length === 0) {
       const result = await query(
         `INSERT INTO business_data 
-         (tenant_id, wholesale_price_per_oz, target_profit_per_month, operating_expenses) 
-         VALUES ($1, $2, $3, $4) 
+         (wholesale_price_per_oz, target_profit_per_month, operating_expenses) 
+         VALUES ($1, $2, $3) 
          RETURNING *`,
-        [tenantId, 100, 2000, 500],
+        [100, 2000, 500],
       )
 
       return toCamelCase(result.rows[0])

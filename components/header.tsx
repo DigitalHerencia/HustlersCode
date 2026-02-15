@@ -7,6 +7,7 @@ import { Menu, Settings, HelpCircle, DollarSign, Code } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { cn } from "@/lib/utils"
+import { SignedIn, SignedOut, SignInButton, SignUpButton, UserButton } from "@clerk/nextjs"
 
 export default function Header() {
   const [isOpen, setIsOpen] = useState(false)
@@ -30,6 +31,21 @@ export default function Header() {
         </div>
 
         <div className="flex items-center gap-2">
+          <SignedIn>
+            <UserButton afterSignOutUrl="/sign-in" />
+          </SignedIn>
+          <SignedOut>
+            <SignInButton mode="modal">
+              <Button variant="outline" size="sm" className="border-gold text-gold hover:bg-gold/10">
+                Sign in
+              </Button>
+            </SignInButton>
+            <SignUpButton mode="modal">
+              <Button variant="ghost" size="sm" className="text-gold hover:bg-gold/10">
+                Sign up
+              </Button>
+            </SignUpButton>
+          </SignedOut>
           <Sheet open={isOpen} onOpenChange={setIsOpen}>
             <SheetTrigger asChild>
               <Button variant="ghost" size="icon" className="text-gold">
