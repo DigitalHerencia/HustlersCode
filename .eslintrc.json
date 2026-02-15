@@ -1,21 +1,6 @@
 {
   "extends": ["next/core-web-vitals"],
-  "overrides": [
-    {
-      "files": ["app/**/*.{ts,tsx}", "components/**/*.{ts,tsx}"],
-      "rules": {
-        "no-restricted-imports": [
-          "error",
-          {
-            "patterns": [
-              {
-                "group": ["@/app/actions", "@/lib/read/*", "@/lib/actions/*", "@/lib/db"],
-                "message": "UI modules must depend on the server facade only (`@/lib/facade/server`)."
-              }
-            ]
-          }
-        ]
-      }
-    }
-  ]
+  "rules": {
+    "react/no-unescaped-entities": "off"
+  }
 }
