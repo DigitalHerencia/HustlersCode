@@ -169,7 +169,7 @@ export default function PriceCharts({ pricePoints }: PriceChartsProps) {
               />
               <Tooltip
                 contentStyle={{ fontSize: isMobile ? "10px" : "12px" }}
-                formatter={(value: any) => [`$${value}`, ""]}
+                formatter={(value: number | string) => [`$${value}`, ""]}
               />
               <Legend
                 wrapperStyle={{ fontSize: isMobile ? "10px" : "12px" }}
@@ -200,7 +200,7 @@ export default function PriceCharts({ pricePoints }: PriceChartsProps) {
               <YAxis tick={{ fontSize: isMobile ? 10 : 12 }} width={isMobile ? 40 : 60} />
               <Tooltip
                 contentStyle={{ fontSize: isMobile ? "10px" : "12px" }}
-                formatter={(value: any) => [`${(value * 100).toFixed(1)}%`, "Profit Margin"]}
+                formatter={(value: number | string) => [`${(value * 100).toFixed(1)}%`, "Profit Margin"]}
               />
               <Legend
                 wrapperStyle={{ fontSize: isMobile ? "10px" : "12px" }}

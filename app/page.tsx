@@ -24,7 +24,7 @@ export default function HomePage() {
       }
     }
 
-    initialize()
+    void initialize()
   }, [])
 
   const handleHideTips = () => {

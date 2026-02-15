@@ -122,7 +122,7 @@ export default function RetailAnalyticsCharts({ scenarios }: RetailAnalyticsChar
               />
               <Tooltip
                 contentStyle={{ fontSize: isMobile ? "10px" : "12px" }}
-                formatter={(value: any) => [`$${value}`, ""]}
+                formatter={(value: number | string) => [`$${value}`, ""]}
               />
               <Legend
                 wrapperStyle={{ fontSize: isMobile ? "10px" : "12px" }}
@@ -206,7 +206,7 @@ export default function RetailAnalyticsCharts({ scenarios }: RetailAnalyticsChar
               />
               <Tooltip
                 contentStyle={{ fontSize: isMobile ? "10px" : "12px" }}
-                formatter={(value: any) => [`$${value}`, ""]}
+                formatter={(value: number | string) => [`$${value}`, ""]}
               />
               <Legend
                 wrapperStyle={{ fontSize: isMobile ? "10px" : "12px" }}

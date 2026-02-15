@@ -42,7 +42,7 @@ export default function SettingsTab({ businessData, inventory, customers, onData
     }
 
     if (!businessData) {
-      loadBusinessData()
+      void loadBusinessData()
     }
   }, [])
 

@@ -65,7 +65,7 @@ export default function AccountsTable({ onAddPayment }: AccountsTableProps) {
       }
     }
 
-    loadAccounts()
+    void loadAccounts()
   }, [])
 
   const accountForm = useForm<z.infer<typeof accountFormSchema>>({

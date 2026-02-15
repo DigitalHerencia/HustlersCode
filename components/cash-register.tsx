@@ -52,7 +52,7 @@ export default function CashRegister({ showTips, onHideTips }: CashRegisterProps
       }
     }
 
-    loadData()
+    void loadData()
   }, [])
 
   // Get selected inventory item
