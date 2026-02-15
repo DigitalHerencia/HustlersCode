@@ -161,13 +161,10 @@ CREATE TABLE IF NOT EXISTS accounts (
 );
 
 -- Indexes
-CREATE INDEX IF NOT EXISTS idx_tenant_domains_domain ON tenant_domains(domain);
-CREATE INDEX IF NOT EXISTS idx_tenant_memberships_tenant_user ON tenant_memberships(tenant_id, user_id);
-CREATE INDEX IF NOT EXISTS idx_business_data_tenant_id ON business_data(tenant_id);
-CREATE INDEX IF NOT EXISTS idx_inventory_items_tenant_name ON inventory_items(tenant_id, name);
-CREATE INDEX IF NOT EXISTS idx_customers_tenant_name ON customers(tenant_id, name);
-CREATE INDEX IF NOT EXISTS idx_customers_tenant_status ON customers(tenant_id, status);
-CREATE INDEX IF NOT EXISTS idx_transactions_tenant_date ON transactions(tenant_id, date);
-CREATE INDEX IF NOT EXISTS idx_transactions_tenant_type ON transactions(tenant_id, type);
-CREATE INDEX IF NOT EXISTS idx_payments_tenant_customer ON payments(tenant_id, customer_id);
-CREATE INDEX IF NOT EXISTS idx_salespeople_tenant_scenario ON salespeople(tenant_id, scenario_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_items_name ON inventory_items(name);
+CREATE INDEX IF NOT EXISTS idx_customers_name ON customers(name);
+CREATE INDEX IF NOT EXISTS idx_customers_status ON customers(status);
+CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date);
+CREATE INDEX IF NOT EXISTS idx_transactions_type ON transactions(type);
+CREATE INDEX IF NOT EXISTS idx_payments_customer_id ON payments(customer_id);
+CREATE INDEX IF NOT EXISTS idx_salespeople_scenario_id ON salespeople(scenario_id);
