@@ -23,7 +23,7 @@ import { Badge } from "@/components/ui/badge"
 import { ChevronDown } from "lucide-react"
 import type { Account, Payment } from "@/lib/data"
 import { formatCurrency } from "@/lib/utils"
-import { getAccounts, createAccount, updateAccount, deleteAccount } from "@/app/actions"
+import { getAccounts, createAccount, updateAccount, deleteAccount } from "@/lib/facade/server"
 
 interface AccountsTableProps {
   onAddPayment?: (accountId: string, payment: Payment) => void
@@ -65,7 +65,7 @@ export default function AccountsTable({ onAddPayment }: AccountsTableProps) {
       }
     }
 
-    loadAccounts()
+    void loadAccounts()
   }, [])
 
   const accountForm = useForm<z.infer<typeof accountFormSchema>>({

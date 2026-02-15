@@ -50,7 +50,7 @@ export default function RetailAnalyticsDashboard() {
     setEditingScenario(scenario)
   }
 
-  const handleUpdateSalespeople = (scenarioId: string, updatedSalespeople: any) => {
+  const handleUpdateSalespeople = (scenarioId: string, updatedSalespeople: ScenarioData["salespeople"]) => {
     setScenarios(
       scenarios.map((scenario) => {
         if (scenario.id === scenarioId) {
@@ -60,7 +60,7 @@ export default function RetailAnalyticsDashboard() {
           }
           // Recalculate total commission
           updatedScenario.totalCommission = updatedSalespeople.reduce(
-            (total: number, person: any) => total + person.earnings,
+            (total: number, person) => total + person.earnings,
             0,
           )
           // Update net profit after commission
