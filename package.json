@@ -7,8 +7,7 @@
     "build": "next build",
     "dev": "next dev",
     "lint": "next lint",
-    "start": "next start",
-    "test:integration": "vitest run"
+    "start": "next start"
   },
   "dependencies": {
     "@clerk/nextjs": "^5.7.5",
@@ -82,7 +81,6 @@
     "eslint-config-next": "^15.5.12",
     "postcss": "^8.5",
     "tailwindcss": "^3.4.17",
-    "typescript": "^5",
-    "vitest": "^4.0.18"
+    "typescript": "^5"
   }
 }

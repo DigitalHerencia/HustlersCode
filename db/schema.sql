@@ -1,39 +1,8 @@
--- Database schema for Retail Analytics Utility (multi-tenant)
-
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
-
--- Tenancy
-CREATE TABLE IF NOT EXISTS tenants (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  slug VARCHAR(100) NOT NULL UNIQUE,
-  name VARCHAR(255) NOT NULL,
-  is_active BOOLEAN NOT NULL DEFAULT TRUE,
-  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS tenant_domains (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-  domain VARCHAR(255) NOT NULL UNIQUE,
-  is_primary BOOLEAN NOT NULL DEFAULT FALSE,
-  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-  UNIQUE (tenant_id, domain)
-);
-
-CREATE TABLE IF NOT EXISTS tenant_memberships (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-  user_id VARCHAR(255) NOT NULL,
-  role VARCHAR(50) NOT NULL DEFAULT 'member',
-  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-  UNIQUE (tenant_id, user_id)
-);
+-- Database schema for Retail Analytics Utility
 
 -- Business Data
 CREATE TABLE IF NOT EXISTS business_data (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
   wholesale_price_per_oz DECIMAL(10, 2) NOT NULL DEFAULT 100,
   target_profit_per_month DECIMAL(10, 2) NOT NULL DEFAULT 2000,
   operating_expenses DECIMAL(10, 2) NOT NULL DEFAULT 500,
@@ -45,7 +14,6 @@ CREATE TABLE IF NOT EXISTS business_data (
 -- Scenarios
 CREATE TABLE IF NOT EXISTS scenarios (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
   name VARCHAR(255) NOT NULL,
   description TEXT,
   wholesale_price DECIMAL(10, 2) NOT NULL,
@@ -61,8 +29,7 @@ CREATE TABLE IF NOT EXISTS scenarios (
 -- Salespeople
 CREATE TABLE IF NOT EXISTS salespeople (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-  scenario_id UUID NOT NULL,
+  scenario_id UUID NOT NULL REFERENCES scenarios(id) ON DELETE CASCADE,
   name VARCHAR(255) NOT NULL,
   commission_rate DECIMAL(5, 2) NOT NULL DEFAULT 0,
   sales_quantity DECIMAL(10, 2) NOT NULL DEFAULT 0,
@@ -75,7 +42,6 @@ CREATE TABLE IF NOT EXISTS salespeople (
 -- Inventory Items
 CREATE TABLE IF NOT EXISTS inventory_items (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
   name VARCHAR(255) NOT NULL,
   description TEXT,
   quantity_g DECIMAL(10, 2) NOT NULL DEFAULT 0,
@@ -94,7 +60,6 @@ CREATE TABLE IF NOT EXISTS inventory_items (
 -- Customers
 CREATE TABLE IF NOT EXISTS customers (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
   name VARCHAR(255) NOT NULL,
   phone VARCHAR(50),
   email VARCHAR(255),
@@ -112,8 +77,7 @@ CREATE TABLE IF NOT EXISTS customers (
 -- Payments
 CREATE TABLE IF NOT EXISTS payments (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-  customer_id UUID NOT NULL,
+  customer_id UUID NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
   amount DECIMAL(10, 2) NOT NULL,
   date DATE NOT NULL,
   method VARCHAR(50) NOT NULL DEFAULT 'cash',
@@ -126,7 +90,6 @@ CREATE TABLE IF NOT EXISTS payments (
 -- Transactions
 CREATE TABLE IF NOT EXISTS transactions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
   date TIMESTAMP WITH TIME ZONE NOT NULL,
   type VARCHAR(50) NOT NULL,
   inventory_id UUID,
@@ -149,7 +112,6 @@ CREATE TABLE IF NOT EXISTS transactions (
 -- Accounts
 CREATE TABLE IF NOT EXISTS accounts (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
   name VARCHAR(255) NOT NULL,
   type VARCHAR(50) NOT NULL DEFAULT 'asset',
   balance DECIMAL(10, 2) NOT NULL DEFAULT 0,
@@ -160,11 +122,60 @@ CREATE TABLE IF NOT EXISTS accounts (
   UNIQUE (tenant_id, name)
 );
 
+-- Seed roles and permissions
+INSERT INTO auth_roles (slug, description) VALUES
+  ('owner', 'Tenant owner with full permissions'),
+  ('admin', 'Tenant admin with broad write access'),
+  ('analyst', 'Reporting and read-only analytical access'),
+  ('operator', 'Operational write access for day-to-day changes'),
+  ('viewer', 'Read-only access')
+ON CONFLICT (slug) DO NOTHING;
+
+INSERT INTO auth_permissions (slug, description) VALUES
+  ('business_data:write', 'Create/update business data'),
+  ('scenario:create', 'Create scenario records'),
+  ('scenario:update', 'Update scenario records'),
+  ('scenario:delete', 'Delete scenario records'),
+  ('inventory:create', 'Create inventory records'),
+  ('inventory:update', 'Update inventory records'),
+  ('inventory:delete', 'Delete inventory records'),
+  ('customer:create', 'Create customer records'),
+  ('customer:update', 'Update customer records'),
+  ('customer:delete', 'Delete customer records'),
+  ('payment:create', 'Create payment records'),
+  ('transaction:create', 'Create transaction records'),
+  ('account:create', 'Create account records'),
+  ('account:update', 'Update account records'),
+  ('account:delete', 'Delete account records'),
+  ('sensitive:read', 'Read sensitive operational data'),
+  ('reporting:export', 'Export tenant reports')
+ON CONFLICT (slug) DO NOTHING;
+
+INSERT INTO auth_role_permissions (role_slug, permission_slug)
+SELECT role_slug, permission_slug
+FROM (VALUES
+  ('owner', 'business_data:write'), ('owner', 'scenario:create'), ('owner', 'scenario:update'), ('owner', 'scenario:delete'),
+  ('owner', 'inventory:create'), ('owner', 'inventory:update'), ('owner', 'inventory:delete'), ('owner', 'customer:create'),
+  ('owner', 'customer:update'), ('owner', 'customer:delete'), ('owner', 'payment:create'), ('owner', 'transaction:create'),
+  ('owner', 'account:create'), ('owner', 'account:update'), ('owner', 'account:delete'), ('owner', 'sensitive:read'), ('owner', 'reporting:export'),
+  ('admin', 'business_data:write'), ('admin', 'scenario:create'), ('admin', 'scenario:update'), ('admin', 'scenario:delete'),
+  ('admin', 'inventory:create'), ('admin', 'inventory:update'), ('admin', 'inventory:delete'), ('admin', 'customer:create'),
+  ('admin', 'customer:update'), ('admin', 'customer:delete'), ('admin', 'payment:create'), ('admin', 'transaction:create'),
+  ('admin', 'account:create'), ('admin', 'account:update'), ('admin', 'account:delete'), ('admin', 'sensitive:read'), ('admin', 'reporting:export'),
+  ('analyst', 'sensitive:read'), ('analyst', 'reporting:export'),
+  ('operator', 'scenario:create'), ('operator', 'scenario:update'), ('operator', 'inventory:create'), ('operator', 'inventory:update'),
+  ('operator', 'customer:create'), ('operator', 'customer:update'), ('operator', 'payment:create'), ('operator', 'transaction:create'), ('operator', 'sensitive:read'),
+  ('viewer', 'sensitive:read')
+) AS seeds(role_slug, permission_slug)
+ON CONFLICT (role_slug, permission_slug) DO NOTHING;
+
 -- Indexes
-CREATE INDEX IF NOT EXISTS idx_inventory_items_name ON inventory_items(name);
-CREATE INDEX IF NOT EXISTS idx_customers_name ON customers(name);
-CREATE INDEX IF NOT EXISTS idx_customers_status ON customers(status);
-CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date);
-CREATE INDEX IF NOT EXISTS idx_transactions_type ON transactions(type);
-CREATE INDEX IF NOT EXISTS idx_payments_customer_id ON payments(customer_id);
-CREATE INDEX IF NOT EXISTS idx_salespeople_scenario_id ON salespeople(scenario_id);
+CREATE INDEX IF NOT EXISTS idx_role_bindings_principal ON auth_role_bindings(principal_id, tenant_id);
+CREATE INDEX IF NOT EXISTS idx_business_data_tenant ON business_data(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_items_name ON inventory_items(tenant_id, name);
+CREATE INDEX IF NOT EXISTS idx_customers_name ON customers(tenant_id, name);
+CREATE INDEX IF NOT EXISTS idx_customers_status ON customers(tenant_id, status);
+CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(tenant_id, date);
+CREATE INDEX IF NOT EXISTS idx_transactions_type ON transactions(tenant_id, type);
+CREATE INDEX IF NOT EXISTS idx_payments_customer_id ON payments(tenant_id, customer_id);
+CREATE INDEX IF NOT EXISTS idx_salespeople_scenario_id ON salespeople(tenant_id, scenario_id);
